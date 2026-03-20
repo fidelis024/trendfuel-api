@@ -11,6 +11,9 @@ export const createReview = asyncHandler(async (req: CustomRequest, res: Respons
 });
 
 export const getSellerReviews = asyncHandler(async (req: CustomRequest, res: Response) => {
-  const reviews = await reviewService.getReviewsBySeller(req.params.sellerId);
+  const sellerId = Array.isArray(req.params.sellerId)
+    ? req.params.sellerId[0]
+    : req.params.sellerId;
+  const reviews = await reviewService.getReviewsBySeller(sellerId);
   res.json(new ApiResponse(200, 'Reviews retrieved', reviews));
 });

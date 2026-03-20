@@ -11,6 +11,7 @@ export const createOrder = asyncHandler(async (req: CustomRequest, res: Response
 });
 
 export const getOrder = asyncHandler(async (req: CustomRequest, res: Response) => {
-  const order = await orderService.getOrder(req.params.id);
+  const orderId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const order = await orderService.getOrder(orderId);
   res.json(new ApiResponse(200, 'Order retrieved', order));
 });

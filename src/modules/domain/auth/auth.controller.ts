@@ -3,7 +3,7 @@ import { CustomRequest } from '../../../types';
 import { asyncHandler } from '../../../utils/asyncHandler';
 import authService from './auth.service';
 import { ApiResponse } from '../../../utils/ApiResponse';
-import { registerSchema, loginSchema } from '../user/user.validator';
+import { registerSchema, loginSchema } from '../../../schemas/zod/user.schema';
 
 export const register = asyncHandler(async (req: CustomRequest, res: Response) => {
   const data = registerSchema.parse(req.body);

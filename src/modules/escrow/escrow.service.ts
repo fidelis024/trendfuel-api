@@ -1,5 +1,5 @@
 // escrow/escrow.service.ts
-import Escrow, { IEscrow } from './escrow.model';
+import Escrow, { IEscrow } from '../../schemas/mongoose/escrow.model';
 
 export class EscrowService {
   async holdFunds(orderId: string, amount: number, holdDays: number): Promise<IEscrow> {

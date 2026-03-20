@@ -1,14 +1,16 @@
 import jwt from 'jsonwebtoken';
-import User, { IUser } from '../user/user.model';
+import User, { IUser } from '../../../schemas/mongoose/user.model';
 import userService from '../user/user.service';
-import { RegisterInput, LoginInput } from '../user/user.validator';
+import { RegisterInput, LoginInput } from '../../../schemas/zod/user.schema';
 import { ApiError } from '../../../utils/ApiError';
 import env from '../../../config/env';
 import logger from '../../../utils/logger';
 
 export class AuthService {
   private generateToken(userId: string): string {
-    return jwt.sign({ userId }, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRE });
+    return jwt.sign({ userId }, env.JWT_SECRET as jwt.Secret, {
+      expiresIn: env.JWT_EXPIRE as jwt.SignOptions['expiresIn'],
+    });
   }
 
   async register(data: RegisterInput): Promise<{ user: IUser; token: string }> {

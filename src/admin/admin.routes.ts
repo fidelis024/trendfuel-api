@@ -1,6 +1,6 @@
 // admin/admin.routes.ts
 import { Router } from 'express';
-import { authenticate, authorize } from '../../middlewares';
+import { authenticate, authorize } from '../middlewares';
 
 const router = Router();
 

@@ -1,5 +1,5 @@
 // payments/payment.service.ts
-import Payment, { IPayment } from './payment.model';
+import Payment, { IPayment } from '../../schemas/mongoose/payment.model';
 
 export class PaymentService {
   async createPayment(paymentData: any): Promise<IPayment> {

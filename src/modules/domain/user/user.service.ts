@@ -1,5 +1,5 @@
-import User, { IUser } from './user.model';
-import { RegisterInput, UpdateProfileInput } from './user.validator';
+import User, { IUser } from '../../../schemas/mongoose/user.model';
+import { RegisterInput, UpdateProfileInput } from '../../../schemas/zod/user.schema';
 import { ApiError } from '../../../utils/ApiError';
 import logger from '../../../utils/logger';
 

@@ -1,5 +1,5 @@
 // reviews/review.service.ts
-import Review, { IReview } from './review.model';
+import Review, { IReview } from '../../schemas/mongoose/review.model';
 
 export class ReviewService {
   async createReview(reviewData: any): Promise<IReview> {

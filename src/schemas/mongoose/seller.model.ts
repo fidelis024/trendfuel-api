@@ -1,33 +1,35 @@
-// Placeholder files for additional modules
-
-// sellers/seller.model.ts
 import { Schema, model, Document } from 'mongoose';
 
 export interface ISeller extends Document {
-  userId: string;
+  userId: Schema.Types.ObjectId;
   businessName: string;
-  businessDescription: string;
+  businessDescription?: string;
   verificationStatus: 'pending' | 'verified' | 'rejected';
   rating: number;
   totalReviews: number;
   totalSales: number;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-const sellerSchema = new Schema<ISeller>(
+const SellerSchema = new Schema<ISeller>(
   {
-    userId: { type: String, required: true, unique: true },
-    businessName: { type: String, required: true },
+    userId: { type: Schema.Types.ObjectId, required: true, unique: true, ref: 'User' },
+    businessName: { type: String, required: true, trim: true },
     businessDescription: { type: String },
     verificationStatus: {
       type: String,
       enum: ['pending', 'verified', 'rejected'],
       default: 'pending',
     },
-    rating: { type: Number, default: 0 },
+    rating: { type: Number, default: 0, min: 0, max: 5 },
     totalReviews: { type: Number, default: 0 },
     totalSales: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
 
-export default model<ISeller>('Seller', sellerSchema);
+SellerSchema.index({ verificationStatus: 1 });
+SellerSchema.index({ rating: -1 });
+
+export default model<ISeller>('Seller', SellerSchema);

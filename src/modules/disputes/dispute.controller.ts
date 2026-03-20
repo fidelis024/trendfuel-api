@@ -11,6 +11,8 @@ export const createDispute = asyncHandler(async (req: CustomRequest, res: Respon
 });
 
 export const resolveDispute = asyncHandler(async (req: CustomRequest, res: Response) => {
-  const dispute = await disputeService.resolveDispute(req.params.id, req.body.resolution);
+  const disputeId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const resolution = String(req.body.resolution);
+  const dispute = await disputeService.resolveDispute(disputeId, resolution);
   res.json(new ApiResponse(200, 'Dispute resolved', dispute));
 });

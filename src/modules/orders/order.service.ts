@@ -1,5 +1,5 @@
 // orders/order.service.ts
-import Order, { IOrder } from './order.model';
+import Order, { IOrder } from '../../schemas/mongoose/order.model';
 import { ApiError } from '../../utils/ApiError';
 
 export class OrderService {

@@ -33,9 +33,9 @@ if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
       async (accessToken, refreshToken, profile, done) => {
         try {
           // User lookup/creation logic here
-          return done(null, profile);
+          return done(null, profile as any);
         } catch (error) {
-          return done(error, false);
+          return done(error as Error);
         }
       }
     )

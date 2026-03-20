@@ -1,5 +1,5 @@
 // disputes/dispute.service.ts
-import Dispute, { IDispute } from './dispute.model';
+import Dispute, { IDispute } from '../../schemas/mongoose/dispute.model';
 
 export class DisputeService {
   async createDispute(disputeData: any): Promise<IDispute> {

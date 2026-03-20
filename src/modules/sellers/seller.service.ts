@@ -1,5 +1,5 @@
 // sellers/seller.service.ts
-import Seller, { ISeller } from './seller.model';
+import Seller, { ISeller } from '../../schemas/mongoose/seller.model';
 import { ApiError } from '../../utils/ApiError';
 
 export class SellerService {
