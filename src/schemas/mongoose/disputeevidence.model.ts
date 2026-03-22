@@ -9,8 +9,9 @@ export interface IDisputeEvidence extends Document {
   disputeId: mongoose.Types.ObjectId;
   uploadedBy: mongoose.Types.ObjectId;
   uploaderRole: EvidenceUploader;
-  fileUrl: string;        // Cloudinary URL
-  fileType: string;       // MIME type
+  fileUrl: string;
+  publicId: string;
+  fileType: string;
   fileName: string;
   createdAt: Date;
 }
@@ -21,6 +22,7 @@ const DisputeEvidenceSchema = new Schema<IDisputeEvidence>(
     uploadedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     uploaderRole: { type: String, enum: Object.values(EvidenceUploader), required: true },
     fileUrl: { type: String, required: true },
+    publicId: { type: String, required: true },
     fileType: { type: String, required: true },
     fileName: { type: String, required: true },
   },

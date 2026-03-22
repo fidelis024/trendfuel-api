@@ -84,7 +84,6 @@ app.use(errorHandler);
 
 const PORT = env.PORT;
 
-
 const startServer = async () => {
   try {
     await connectDB();

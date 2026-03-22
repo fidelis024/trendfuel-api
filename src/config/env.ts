@@ -15,6 +15,9 @@ const envSchema = z.object({
   ORDER_AUTO_COMPLETE_HOURS: z.coerce.number().default(72),
   SELLER_RESPOND_HOURS: z.coerce.number().default(48),
   WITHDRAWAL_DELAY_DAYS: z.coerce.number().default(7),
+  CLOUDINARY_CLOUD_NAME: z.string().min(1, 'Cloudinary cloud name is required'),
+  CLOUDINARY_API_KEY: z.string().min(1, 'Cloudinary API key is required'),
+  CLOUDINARY_API_SECRET: z.string().min(1, 'Cloudinary API secret is required'),
 });
 
 const env = envSchema.parse(process.env);

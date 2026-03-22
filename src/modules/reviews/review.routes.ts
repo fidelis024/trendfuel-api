@@ -1,11 +1,193 @@
-// reviews/review.routes.ts
 import { Router } from 'express';
-import { createReview, getSellerReviews } from './review.controller';
 import { authenticate } from '../../middlewares/authenticate';
+import { authorize } from '../../middlewares/authenticate';
+import { validate } from '../../middlewares/validate';
+import {
+  createReviewSchema,
+  getReviewsSchema,
+  reviewIdSchema,
+  sellerIdParamSchema,
+} from '../../schemas/zod/review.schema';
+import * as reviewController from './review.controller';
 
 const router = Router();
 
-router.post('/', authenticate, createReview);
-router.get('/seller/:sellerId', getSellerReviews);
+/**
+ * @swagger
+ * tags:
+ *   name: Reviews
+ *   description: Service reviews and ratings
+ */
+
+/**
+ * @swagger
+ * /reviews:
+ *   post:
+ *     summary: Post a review for a completed order (buyer only)
+ *     tags: [Reviews]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [orderId, rating, comment]
+ *             properties:
+ *               orderId:
+ *                 type: string
+ *               rating:
+ *                 type: integer
+ *                 minimum: 1
+ *                 maximum: 5
+ *                 example: 5
+ *               comment:
+ *                 type: string
+ *                 example: Excellent service, delivered fast and exactly as described!
+ *     responses:
+ *       201:
+ *         description: Review posted successfully
+ *       400:
+ *         description: Order not completed or already reviewed
+ *       404:
+ *         description: Order not found
+ *       409:
+ *         description: Already reviewed this order
+ */
+router.post(
+  '/',
+  authenticate,
+  authorize('buyer'),
+  validate(createReviewSchema),
+  reviewController.createReview
+);
+
+/**
+ * @swagger
+ * /reviews/seller/{sellerId}:
+ *   get:
+ *     summary: Get all reviews for a seller (public) — includes rating summary breakdown
+ *     tags: [Reviews]
+ *     parameters:
+ *       - in: path
+ *         name: sellerId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *     responses:
+ *       200:
+ *         description: Seller reviews with rating summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     reviews:
+ *                       type: array
+ *                     summary:
+ *                       type: object
+ *                       properties:
+ *                         avgRating:
+ *                           type: number
+ *                           example: 4.7
+ *                         total:
+ *                           type: integer
+ *                         breakdown:
+ *                           type: object
+ *                           properties:
+ *                             "5": { type: integer }
+ *                             "4": { type: integer }
+ *                             "3": { type: integer }
+ *                             "2": { type: integer }
+ *                             "1": { type: integer }
+ */
+router.get(
+  '/seller/:sellerId',
+  validate(sellerIdParamSchema),
+  validate(getReviewsSchema),
+  reviewController.getSellerReviews
+);
+
+/**
+ * @swagger
+ * /reviews/service/{serviceId}:
+ *   get:
+ *     summary: Get all reviews for a specific service listing (public)
+ *     tags: [Reviews]
+ *     parameters:
+ *       - in: path
+ *         name: serviceId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *     responses:
+ *       200:
+ *         description: Service reviews
+ */
+router.get('/service/:serviceId', validate(getReviewsSchema), reviewController.getServiceReviews);
+
+/**
+ * @swagger
+ * /reviews/order/{orderId}:
+ *   get:
+ *     summary: Get the buyer's own review for a specific order
+ *     tags: [Reviews]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Review for this order
+ *       404:
+ *         description: No review found for this order
+ */
+router.get('/order/:orderId', authenticate, reviewController.getMyReview);
+
+/**
+ * @swagger
+ * /reviews/{id}:
+ *   delete:
+ *     summary: Delete your own review (buyer only, within 24 hours of posting)
+ *     tags: [Reviews]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Review deleted
+ *       400:
+ *         description: Cannot delete after 24 hours
+ *       404:
+ *         description: Review not found
+ */
+router.delete(
+  '/:id',
+  authenticate,
+  authorize('buyer'),
+  validate(reviewIdSchema),
+  reviewController.deleteReview
+);
 
 export default router;

@@ -28,12 +28,12 @@ export interface IDispute extends Document {
   reason: string;
   buyerStatement: string;
   sellerResponse: string | null;
-  sellerRespondBy: Date | null;   // deadline for seller to respond
+  sellerRespondBy: Date | null;
   status: DisputeStatus;
   resolution: DisputeResolution | null;
-  refundAmount: number;           // cents; 0 if no_refund
+  refundAmount: number;
   sellerPenalty: SellerPenalty;
-  resolvedBy: mongoose.Types.ObjectId | null; // admin user ID
+  resolvedBy: mongoose.Types.ObjectId | null;
   adminNote: string | null;
   resolvedAt: Date | null;
   createdAt: Date;
@@ -42,7 +42,13 @@ export interface IDispute extends Document {
 
 const DisputeSchema = new Schema<IDispute>(
   {
-    orderId: { type: Schema.Types.ObjectId, ref: 'Order', required: true, index: true },
+    orderId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Order',
+      required: true,
+      unique: true,
+      index: true,
+    },
     buyerId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     sellerId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     reason: { type: String, required: true, maxlength: 200 },
@@ -69,7 +75,6 @@ const DisputeSchema = new Schema<IDispute>(
   { timestamps: true }
 );
 
-DisputeSchema.index({ status: 1, createdAt: -1 }); // admin dispute queue
-DisputeSchema.index({ orderId: 1 }, { unique: true }); // one dispute per order
+DisputeSchema.index({ status: 1, createdAt: -1 });
 
 export const Dispute = mongoose.model<IDispute>('Dispute', DisputeSchema);

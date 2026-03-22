@@ -223,3 +223,72 @@ export const sendOrderCancelledEmail = async (
     'order cancelled email'
   );
 };
+
+export const sendDisputeOpenedEmail = async (
+  sellerEmail: string,
+  sellerFirstName: string,
+  dispute: { disputeId: string; serviceTitle: string; respondBy: Date }
+): Promise<void> => {
+  const dashboardUrl = `${env.API_URL}/dashboard/disputes/${dispute.disputeId}`;
+  const deadline = dispute.respondBy.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  await sendEmail(
+    sellerEmail,
+    `Dispute opened on your order`,
+    wrap(`
+    <h2 style="margin:0 0 12px;color:#f1f5f9;font-size:20px;font-weight:600;">A dispute has been opened</h2>
+    <p style="margin:0 0 24px;color:#94a3b8;font-size:15px;line-height:1.6;">
+      Hey ${sellerFirstName}, a buyer has opened a dispute on your order for
+      <strong style="color:#f1f5f9;">${dispute.serviceTitle}</strong>.
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td style="background-color:#1e1b4b;border-left:3px solid #E24B4A;border-radius:4px;padding:14px 16px;margin-bottom:24px;">
+        <p style="margin:0;color:#F09595;font-size:13px;line-height:1.5;">
+          You have until <strong>${deadline}</strong> to respond. If you don't respond in time, the admin will review the dispute without your input.
+        </p>
+      </td>
+    </tr></table>
+    <br/>
+    ${btn(dashboardUrl, 'Respond to Dispute')}
+  `),
+    'dispute opened email'
+  );
+};
+
+export const sendDisputeResolvedEmail = async (
+  recipientEmail: string,
+  recipientFirstName: string,
+  dispute: { disputeId: string; serviceTitle: string; resolution: string; refundAmount: number }
+): Promise<void> => {
+  const dashboardUrl = `${env.API_URL}/dashboard/disputes/${dispute.disputeId}`;
+  const refund = dispute.refundAmount > 0 ? `$${(dispute.refundAmount / 100).toFixed(2)}` : null;
+
+  const resolutionText: Record<string, string> = {
+    refund_full: 'Full refund issued to buyer',
+    refund_partial: `Partial refund of ${refund} issued to buyer`,
+    no_refund: 'No refund — payment released to seller',
+  };
+
+  await sendEmail(
+    recipientEmail,
+    `Dispute resolved: ${dispute.serviceTitle}`,
+    wrap(`
+    <h2 style="margin:0 0 12px;color:#f1f5f9;font-size:20px;font-weight:600;">Dispute resolved</h2>
+    <p style="margin:0 0 24px;color:#94a3b8;font-size:15px;line-height:1.6;">
+      Hey ${recipientFirstName}, a dispute for <strong style="color:#f1f5f9;">${dispute.serviceTitle}</strong> has been resolved by our team.
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background:#0f1117;border-radius:8px;">
+      <tr><td style="padding:20px;">
+        <p style="margin:0;color:#64748b;font-size:12px;text-transform:uppercase;">Decision</p>
+        <p style="margin:4px 0 0;color:#f1f5f9;font-size:15px;">${resolutionText[dispute.resolution] ?? dispute.resolution}</p>
+      </td></tr>
+    </table>
+    ${btn(dashboardUrl, 'View Dispute')}
+  `),
+    'dispute resolved email'
+  );
+};

@@ -5,10 +5,10 @@ export interface IReview extends Document {
   buyerId: mongoose.Types.ObjectId;
   sellerId: mongoose.Types.ObjectId;
   serviceId: mongoose.Types.ObjectId;
-  rating: number;       // 1–5
+  rating: number;
   comment: string;
-  isFlagged: boolean;   // flagged for moderation
-  isVisible: boolean;   // hidden if spam / after moderation
+  isFlagged: boolean;
+  isVisible: boolean;
   flagReason: string | null;
   createdAt: Date;
   updatedAt: Date;
