@@ -56,7 +56,7 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: `${env.API_URL}/api/v1`,  // ← add /api/v1 here
+        url: `${env.API_URL}/api/v1`, // ← add /api/v1 here
         description: 'API Server',
       },
     ],

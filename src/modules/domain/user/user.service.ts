@@ -1,61 +1,56 @@
-import User, { IUser } from '../../../schemas/mongoose/user.model';
-import { RegisterInput, UpdateProfileInput } from '../../../schemas/zod/user.schema';
+import { User, UserStatus } from '../../../schemas/mongoose/user.model';
 import { ApiError } from '../../../utils/ApiError';
-import logger from '../../../utils/logger';
+import type { UpdateProfileInput, ChangePasswordInput } from './user.validator';
 
-export class UserService {
-  async getUserById(userId: string): Promise<IUser> {
-    const user = await User.findById(userId).select('-password');
-    if (!user) {
-      throw new ApiError(404, 'User not found');
-    }
-    return user;
-  }
+// ─── Get Me ───────────────────────────────────────────────────────────────────
 
-  async getUserByEmail(email: string): Promise<IUser | null> {
-    return User.findOne({ email: email.toLowerCase() });
-  }
+export const getMe = async (userId: string) => {
+  const user = await User.findById(userId);
+  if (!user) throw ApiError.notFound('User not found');
+  return user;
+};
 
-  async createUser(data: RegisterInput): Promise<IUser> {
-    const existingUser = await this.getUserByEmail(data.email);
-    if (existingUser) {
-      throw new ApiError(400, 'Email already in use');
-    }
+// ─── Update Profile ───────────────────────────────────────────────────────────
 
-    const user = new User({
-      firstName: data.firstName,
-      lastName: data.lastName,
-      email: data.email.toLowerCase(),
-      password: data.password,
-      role: data.role,
-    });
+export const updateProfile = async (userId: string, data: UpdateProfileInput) => {
+  const user = await User.findById(userId);
+  if (!user) throw ApiError.notFound('User not found');
 
-    await user.save();
-    logger.info(`User created: ${user._id}`);
-    return user;
-  }
+  if (data.firstName) user.firstName = data.firstName;
+  if (data.lastName) user.lastName = data.lastName;
 
-  async updateUserProfile(userId: string, data: UpdateProfileInput): Promise<IUser> {
-    const user = await User.findByIdAndUpdate(userId, data, {
-      new: true,
-      runValidators: true,
-    }).select('-password');
+  await user.save();
+  return user;
+};
 
-    if (!user) {
-      throw new ApiError(404, 'User not found');
-    }
+// ─── Change Password ──────────────────────────────────────────────────────────
 
-    logger.info(`User profile updated: ${userId}`);
-    return user;
-  }
+export const changePassword = async (userId: string, data: ChangePasswordInput) => {
+  // Explicitly select passwordHash since it's excluded by default
+  const user = await User.findById(userId).select('+passwordHash');
+  if (!user) throw ApiError.notFound('User not found');
 
-  async deleteUser(userId: string): Promise<void> {
-    const result = await User.findByIdAndDelete(userId);
-    if (!result) {
-      throw new ApiError(404, 'User not found');
-    }
-    logger.info(`User deleted: ${userId}`);
-  }
-}
+  const isMatch = await user.comparePassword(data.currentPassword);
+  if (!isMatch) throw ApiError.badRequest('Current password is incorrect');
 
-export default new UserService();
+  user.passwordHash = data.newPassword; // pre-save hook rehashes
+  // Invalidate all existing sessions on password change
+  user.refreshToken = null;
+  user.refreshTokenExpires = null;
+  await user.save();
+};
+
+// ─── Deactivate Account ───────────────────────────────────────────────────────
+
+export const deactivateAccount = async (userId: string, password: string) => {
+  const user = await User.findById(userId).select('+passwordHash');
+  if (!user) throw ApiError.notFound('User not found');
+
+  const isMatch = await user.comparePassword(password);
+  if (!isMatch) throw ApiError.badRequest('Password is incorrect');
+
+  user.status = UserStatus.SUSPENDED;
+  user.refreshToken = null;
+  user.refreshTokenExpires = null;
+  await user.save();
+};
