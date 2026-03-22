@@ -8,15 +8,13 @@ export enum WalletType {
 export interface IWallet extends Document {
   userId: mongoose.Types.ObjectId;
   type: WalletType;
-  // Buyer fields
-  balance: number;            // spendable balance (cents)
-  // Seller fields
-  pendingBalance: number;     // in escrow, not yet cleared
-  clearedBalance: number;     // available for withdrawal
-  lifetimeEarnings: number;   // total ever earned
-  currency: string;           // ISO 4217, default 'USD'
-  updatedAt: Date;
+  balance: number;
+  pendingBalance: number;
+  clearedBalance: number;
+  lifetimeEarnings: number;
+  currency: string;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 const WalletSchema = new Schema<IWallet>(
@@ -25,14 +23,10 @@ const WalletSchema = new Schema<IWallet>(
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-      unique: true, // one wallet per user
+      unique: true,
       index: true,
     },
-    type: {
-      type: String,
-      enum: Object.values(WalletType),
-      required: true,
-    },
+    type: { type: String, enum: Object.values(WalletType), required: true },
     balance: { type: Number, default: 0, min: 0 },
     pendingBalance: { type: Number, default: 0, min: 0 },
     clearedBalance: { type: Number, default: 0, min: 0 },

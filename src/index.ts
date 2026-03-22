@@ -16,6 +16,7 @@ import { connectDB } from './config/db';
 import errorHandler from './middlewares/errorHandler';
 import logger from './utils/logger';
 import apiRoutes from './modules/index';
+import { initCronJobs } from './utils/cron';
 
 const app = express();
 
@@ -83,9 +84,11 @@ app.use(errorHandler);
 
 const PORT = env.PORT;
 
+
 const startServer = async () => {
   try {
     await connectDB();
+    initCronJobs(); // ← add this line
     app.listen(PORT, () => {
       logger.info(`Server running on port ${PORT}`);
     });

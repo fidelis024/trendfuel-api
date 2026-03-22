@@ -1,13 +1,13 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export enum OrderStatus {
-  PENDING = 'pending',           // paid, waiting for seller to start
-  PROCESSING = 'processing',     // seller accepted / working
-  DELIVERED = 'delivered',       // seller marked delivered
-  COMPLETED = 'completed',       // buyer confirmed OR timer expired
-  DISPUTED = 'disputed',         // buyer opened dispute
-  CANCELLED = 'cancelled',       // cancelled before processing
-  REFUNDED = 'refunded',         // full refund issued
+  PENDING = 'pending',
+  PROCESSING = 'processing',
+  DELIVERED = 'delivered',
+  COMPLETED = 'completed',
+  DISPUTED = 'disputed',
+  CANCELLED = 'cancelled',
+  REFUNDED = 'refunded',
 }
 
 export interface IOrder extends Document {
@@ -15,14 +15,14 @@ export interface IOrder extends Document {
   sellerId: mongoose.Types.ObjectId;
   serviceId: mongoose.Types.ObjectId;
   quantity: number;
-  unitPrice: number;       // snapshot at time of order (cents)
-  totalAmount: number;     // quantity * unitPrice
-  platformFee: number;     // commission taken by platform
-  sellerEarnings: number;  // totalAmount - platformFee
+  unitPrice: number;
+  totalAmount: number;
+  platformFee: number;
+  sellerEarnings: number;
   status: OrderStatus;
-  deliveryLink: string | null;  // URL/proof seller submits
+  deliveryLink: string | null;
   deliveredAt: Date | null;
-  autoCompleteAt: Date | null;  // set when delivered, buyer has X hours to dispute
+  autoCompleteAt: Date | null;
   completedAt: Date | null;
   buyerNote: string | null;
   createdAt: Date;
@@ -47,16 +47,15 @@ const OrderSchema = new Schema<IOrder>(
     },
     deliveryLink: { type: String, default: null },
     deliveredAt: { type: Date, default: null },
-    autoCompleteAt: { type: Date, default: null, index: true }, // queried by cron/queue
+    autoCompleteAt: { type: Date, default: null, index: true },
     completedAt: { type: Date, default: null },
     buyerNote: { type: String, default: null, maxlength: 500 },
   },
   { timestamps: true }
 );
 
-// Key compound indexes
 OrderSchema.index({ buyerId: 1, status: 1, createdAt: -1 });
 OrderSchema.index({ sellerId: 1, status: 1, createdAt: -1 });
-OrderSchema.index({ status: 1, autoCompleteAt: 1 }); // for the auto-complete job
+OrderSchema.index({ status: 1, autoCompleteAt: 1 });
 
 export const Order = mongoose.model<IOrder>('Order', OrderSchema);

@@ -9,10 +9,10 @@ export enum EscrowStatus {
 
 export interface IEscrow extends Document {
   orderId: mongoose.Types.ObjectId;
-  amount: number;           // total held (cents)
+  amount: number;
   status: EscrowStatus;
-  releasedAmount: number;   // how much was released to seller
-  refundedAmount: number;   // how much was refunded to buyer
+  releasedAmount: number;
+  refundedAmount: number;
   releasedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -24,7 +24,7 @@ const EscrowSchema = new Schema<IEscrow>(
       type: Schema.Types.ObjectId,
       ref: 'Order',
       required: true,
-      unique: true, // one escrow per order, enforced at DB level
+      unique: true,
       index: true,
     },
     amount: { type: Number, required: true, min: 0 },

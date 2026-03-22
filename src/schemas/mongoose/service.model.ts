@@ -17,7 +17,7 @@ export interface IService extends Document {
   categoryId: mongoose.Types.ObjectId;
   title: string;
   description: string;
-  pricePerUnit: number; // in cents/smallest currency unit
+  pricePerUnit: number; // in cents
   minQty: number;
   maxQty: number;
   deliveryHours: number;
@@ -69,7 +69,10 @@ const ServiceSchema = new Schema<IService>(
     minQty: { type: Number, required: true, min: 1 },
     maxQty: { type: Number, required: true },
     deliveryHours: { type: Number, required: true, min: 1 },
-    refillPolicy: { type: RefillPolicySchema, default: () => ({ offered: false, windowDays: 0, conditions: '' }) },
+    refillPolicy: {
+      type: RefillPolicySchema,
+      default: () => ({ offered: false, windowDays: 0, conditions: '' }),
+    },
     tags: { type: [String], default: [] },
     isActive: { type: Boolean, default: true, index: true },
     isFeatured: { type: Boolean, default: false, index: true },

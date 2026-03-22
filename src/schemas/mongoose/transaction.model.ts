@@ -1,15 +1,15 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export enum TransactionType {
-  TOPUP = 'topup',                   // buyer adds funds
-  ORDER_DEBIT = 'order_debit',       // buyer pays for order
-  ESCROW_RELEASE = 'escrow_release', // funds released to seller
-  WITHDRAWAL = 'withdrawal',         // seller withdraws
-  REFUND = 'refund',                 // buyer refunded
-  COMMISSION = 'commission',         // platform takes its cut
-  REFERRAL_BONUS = 'referral_bonus', // referral reward
-  PROMO = 'promo',                   // promo code credit
-  SELLER_ACCESS_FEE = 'seller_access_fee', // one-time seller onboarding fee
+  TOPUP = 'topup',
+  ORDER_DEBIT = 'order_debit',
+  ESCROW_RELEASE = 'escrow_release',
+  WITHDRAWAL = 'withdrawal',
+  REFUND = 'refund',
+  COMMISSION = 'commission',
+  REFERRAL_BONUS = 'referral_bonus',
+  PROMO = 'promo',
+  SELLER_ACCESS_FEE = 'seller_access_fee',
 }
 
 export enum TransactionDirection {
@@ -27,20 +27,20 @@ export enum PaymentGateway {
   STRIPE = 'stripe',
   CRYPTO = 'crypto',
   BANK = 'bank',
-  INTERNAL = 'internal', // wallet-to-wallet moves
+  INTERNAL = 'internal',
 }
 
 export interface ITransaction extends Document {
   walletId: mongoose.Types.ObjectId;
   userId: mongoose.Types.ObjectId;
   type: TransactionType;
-  amount: number;           // always positive (cents)
+  amount: number;
   direction: TransactionDirection;
   status: TransactionStatus;
-  reference: string;        // unique idempotency key
+  reference: string;
   relatedOrderId: mongoose.Types.ObjectId | null;
   gateway: PaymentGateway;
-  gatewayMeta: Record<string, unknown>; // raw gateway payload for reconciliation
+  gatewayMeta: Record<string, unknown>;
   description: string;
   createdAt: Date;
   updatedAt: Date;
@@ -74,6 +74,6 @@ const TransactionSchema = new Schema<ITransaction>(
 
 TransactionSchema.index({ userId: 1, createdAt: -1 });
 TransactionSchema.index({ walletId: 1, type: 1, createdAt: -1 });
-TransactionSchema.index({ status: 1, type: 1 }); // for admin finance dashboard
+TransactionSchema.index({ status: 1, type: 1 });
 
 export const Transaction = mongoose.model<ITransaction>('Transaction', TransactionSchema);

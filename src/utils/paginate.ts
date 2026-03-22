@@ -1,34 +1,33 @@
-// utils/paginate.ts
 export interface PaginationOptions {
   page: number;
   limit: number;
 }
 
-export interface PaginationResult<T> {
+export interface PaginatedResult<T> {
   data: T[];
-  totalPages: number;
-  currentPage: number;
-  totalItems: number;
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
 }
 
-export const paginate = async <T>(
-  query: any,
-  options: PaginationOptions
-): Promise<PaginationResult<T>> => {
-  const { page = 1, limit = 10 } = options;
-  const skip = (page - 1) * limit;
+export const getPaginationOptions = (page: number, limit: number) => ({
+  skip: (page - 1) * limit,
+  limit,
+});
 
-  const [data, totalItems] = await Promise.all([
-    query.skip(skip).limit(limit),
-    query.model.countDocuments(),
-  ]);
-
+export const buildPaginationMeta = (total: number, page: number, limit: number) => {
+  const totalPages = Math.ceil(total / limit);
   return {
-    data,
-    totalPages: Math.ceil(totalItems / limit),
-    currentPage: page,
-    totalItems,
+    total,
+    page,
+    limit,
+    totalPages,
+    hasNext: page < totalPages,
+    hasPrev: page > 1,
   };
 };
-
-export default paginate;
