@@ -45,6 +45,7 @@ app.use(limiter);
 app.use(passport.initialize());
 
 // Swagger
+// Swagger — add basePath to server URL
 const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
@@ -55,7 +56,7 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: env.API_URL,
+        url: `${env.API_URL}/api/v1`,  // ← add /api/v1 here
         description: 'API Server',
       },
     ],
@@ -75,7 +76,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date() });
 });
 
-app.use('/api/', apiRoutes);
+app.use('/api/v1', apiRoutes);
 
 // Error handler
 app.use(errorHandler);

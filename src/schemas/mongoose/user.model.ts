@@ -48,6 +48,8 @@ export interface ISellerMetrics {
 }
 
 export interface IUser extends Document {
+  firstName: string;
+  lastName: string;
   email: string;
   passwordHash: string;
   role: UserRole;
@@ -70,6 +72,7 @@ export interface IUser extends Document {
   updatedAt: Date;
   comparePassword(candidate: string): Promise<boolean>;
   isActive(): boolean;
+  fullName(): string;
 }
 
 const TwoFASchema = new Schema<ITwoFA>(
@@ -113,6 +116,8 @@ const SellerMetricsSchema = new Schema<ISellerMetrics>(
 
 const UserSchema = new Schema<IUser>(
   {
+    firstName: { type: String, required: true, trim: true, maxlength: 50 },
+    lastName: { type: String, required: true, trim: true, maxlength: 50 },
     email: {
       type: String,
       required: true,
@@ -148,6 +153,7 @@ const UserSchema = new Schema<IUser>(
 UserSchema.index({ role: 1, status: 1 });
 UserSchema.index({ 'sellerProfile.applicationStatus': 1 });
 UserSchema.index({ createdAt: -1 });
+UserSchema.index({ firstName: 1, lastName: 1 }); // for admin user search
 
 UserSchema.pre('save', async function (next) {
   if (!this.isModified('passwordHash')) return next();
@@ -161,6 +167,10 @@ UserSchema.methods.comparePassword = async function (candidate: string): Promise
 
 UserSchema.methods.isActive = function (): boolean {
   return this.status === UserStatus.ACTIVE;
+};
+
+UserSchema.methods.fullName = function (): string {
+  return `${this.firstName} ${this.lastName}`;
 };
 
 UserSchema.set('toJSON', {

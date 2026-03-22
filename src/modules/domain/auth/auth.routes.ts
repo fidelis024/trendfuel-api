@@ -30,21 +30,33 @@ const router = Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required: [email, password, confirmPassword, agreeToTerms]
+ *             required: [firstName, lastName, email, password, confirmPassword, agreeToTerms]
  *             properties:
+ *               firstName:
+ *                 type: string
+ *                 example: Michael
+ *               lastName:
+ *                 type: string
+ *                 example: Peter
  *               email:
  *                 type: string
+ *                 example: michael@example.com
  *               password:
  *                 type: string
+ *                 example: Secret123
  *               confirmPassword:
  *                 type: string
+ *                 example: Secret123
  *               agreeToTerms:
  *                 type: boolean
+ *                 example: true
  *     responses:
  *       201:
  *         description: Registration successful, verification email sent
  *       409:
  *         description: Email already in use
+ *       400:
+ *         description: Validation error
  */
 router.post('/register', validate(registerSchema), authController.register);
 
@@ -84,10 +96,13 @@ router.get('/verify-email/:token', authController.verifyEmail);
  *             properties:
  *               email:
  *                 type: string
+ *                 example: michael@example.com
  *               password:
  *                 type: string
+ *                 example: Secret123
  *               rememberMe:
  *                 type: boolean
+ *                 example: false
  *     responses:
  *       200:
  *         description: Login successful, tokens set in cookies
@@ -130,7 +145,7 @@ router.post('/logout', authenticate, authController.logout);
  * @swagger
  * /auth/forgot-password:
  *   post:
- *     summary: Request password reset email
+ *     summary: Request a password reset email
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -142,6 +157,7 @@ router.post('/logout', authenticate, authController.logout);
  *             properties:
  *               email:
  *                 type: string
+ *                 example: michael@example.com
  *     responses:
  *       200:
  *         description: Reset email sent if account exists
@@ -170,8 +186,10 @@ router.post('/forgot-password', validate(forgotPasswordSchema), authController.f
  *             properties:
  *               password:
  *                 type: string
+ *                 example: NewSecret123
  *               confirmPassword:
  *                 type: string
+ *                 example: NewSecret123
  *     responses:
  *       200:
  *         description: Password reset successfully

@@ -16,21 +16,21 @@ export const registerUser = async (data: RegisterInput) => {
   const existing = await User.findOne({ email: data.email.toLowerCase() });
   if (existing) throw ApiError.conflict('An account with this email already exists');
 
-  // Generate email verification token
   const rawToken = generateCryptoToken();
   const hashedToken = hashToken(rawToken);
   const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
   const user = await User.create({
+    firstName: data.firstName,
+    lastName: data.lastName,
     email: data.email.toLowerCase(),
-    passwordHash: data.password, // pre-save hook will hash this
+    passwordHash: data.password, // pre-save hook hashes this
     role: UserRole.BUYER,
     emailVerifyToken: hashedToken,
     emailVerifyExpires: expires,
   });
 
-  // Send verification email (non-blocking on failure — don't crash registration)
-  await sendVerificationEmail(user.email, rawToken);
+  await sendVerificationEmail(user.email, rawToken, user.firstName);
 
   return user;
 };
@@ -59,7 +59,6 @@ export const verifyEmail = async (rawToken: string) => {
 // ─── Login ────────────────────────────────────────────────────────────────────
 
 export const loginUser = async (data: LoginInput, ipAddress: string) => {
-  // Explicitly select passwordHash since it's excluded by default
   const user = await User.findOne({ email: data.email.toLowerCase() }).select(
     '+passwordHash +refreshToken +refreshTokenExpires'
   );
@@ -75,13 +74,11 @@ export const loginUser = async (data: LoginInput, ipAddress: string) => {
   if (!user.isActive())
     throw ApiError.forbidden('Your account has been suspended. Please contact support');
 
-  // Generate tokens
   const payload = { userId: user._id.toString(), role: user.role };
   const accessToken = generateAccessToken(payload);
   const rawRefreshToken = generateCryptoToken();
   const hashedRefreshToken = hashToken(rawRefreshToken);
 
-  // Store hashed refresh token
   user.refreshToken = hashedRefreshToken;
   user.refreshTokenExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   user.lastLoginAt = new Date();
@@ -106,7 +103,6 @@ export const refreshAccessToken = async (rawRefreshToken: string) => {
   if (!user) throw ApiError.unauthorized('Refresh token is invalid or has expired');
   if (!user.isActive()) throw ApiError.forbidden('Account is suspended');
 
-  // Rotate refresh token on every use
   const payload = { userId: user._id.toString(), role: user.role };
   const newAccessToken = generateAccessToken(payload);
   const newRawRefreshToken = generateCryptoToken();
@@ -144,7 +140,7 @@ export const forgotPassword = async (email: string) => {
   user.passwordResetExpires = expires;
   await user.save();
 
-  await sendPasswordResetEmail(user.email, rawToken);
+  await sendPasswordResetEmail(user.email, rawToken, user.firstName);
 };
 
 // ─── Reset Password ───────────────────────────────────────────────────────────
@@ -162,7 +158,6 @@ export const resetPassword = async (rawToken: string, newPassword: string) => {
   user.passwordHash = newPassword; // pre-save hook rehashes
   user.passwordResetToken = null;
   user.passwordResetExpires = null;
-  // Invalidate all sessions on password reset
   user.refreshToken = null;
   user.refreshTokenExpires = null;
   await user.save();
