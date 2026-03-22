@@ -15,6 +15,7 @@ import env from './config/env';
 import { connectDB } from './config/db';
 import errorHandler from './middlewares/errorHandler';
 import logger from './utils/logger';
+import apiRoutes from './modules/index';
 
 const app = express();
 
@@ -63,12 +64,18 @@ const swaggerOptions = {
 };
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
+
+app.get('/', (req, res) => {
+  res.json({ status: 'Server is running', timestamp: new Date() });
+});
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Routes (to be added)
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date() });
 });
+
+app.use('/api/', apiRoutes);
 
 // Error handler
 app.use(errorHandler);

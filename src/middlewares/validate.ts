@@ -1,17 +1,25 @@
-// middlewares/validate.ts
 import { Request, Response, NextFunction } from 'express';
-import { ZodSchema } from 'zod';
+import { AnyZodObject, ZodError } from 'zod';
 import { ApiError } from '../utils/ApiError';
 
-export const validate = (schema: ZodSchema) => {
-  return (req: Request, res: Response, next: NextFunction) => {
+export const validate =
+  (schema: AnyZodObject) => async (req: Request, _res: Response, next: NextFunction) => {
     try {
-      schema.parse(req.body);
+      await schema.parseAsync({
+        body: req.body,
+        params: req.params,
+        query: req.query,
+      });
       next();
-    } catch (error: any) {
-      throw new ApiError(400, 'Validation error: ' + error.message);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const errors = error.errors.map((e) => ({
+          field: e.path.slice(1).join('.'), // strip leading 'body'/'params'
+          message: e.message,
+        }));
+        next(ApiError.badRequest('Validation failed', errors));
+      } else {
+        next(error);
+      }
     }
   };
-};
-
-export default validate;

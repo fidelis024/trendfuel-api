@@ -11,7 +11,7 @@ export enum UserStatus {
   ACTIVE = 'active',
   SUSPENDED = 'suspended',
   BANNED = 'banned',
-  PENDING = 'pending', // seller awaiting approval
+  PENDING = 'pending',
 }
 
 export enum SellerLevel {
@@ -22,9 +22,9 @@ export enum SellerLevel {
 }
 
 export interface ITwoFA {
-  secret?: string;
+  secret: string;
   enabled: boolean;
-  backupCodes?: string[];
+  backupCodes: string[];
 }
 
 export interface ISellerProfile {
@@ -57,6 +57,8 @@ export interface IUser extends Document {
   emailVerifyExpires: Date | null;
   passwordResetToken: string | null;
   passwordResetExpires: Date | null;
+  refreshToken: string | null;
+  refreshTokenExpires: Date | null;
   twoFA: ITwoFA;
   sellerProfile: ISellerProfile | null;
   sellerMetrics: ISellerMetrics | null;
@@ -66,8 +68,6 @@ export interface IUser extends Document {
   lastLoginAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
-
-  // methods
   comparePassword(candidate: string): Promise<boolean>;
   isActive(): boolean;
 }
@@ -122,22 +122,19 @@ const UserSchema = new Schema<IUser>(
       index: true,
     },
     passwordHash: { type: String, required: true, select: false },
-    role: {
-      type: String,
-      enum: Object.values(UserRole),
-      default: UserRole.BUYER,
-    },
-    status: {
-      type: String,
-      enum: Object.values(UserStatus),
-      default: UserStatus.ACTIVE,
-    },
+    role: { type: String, enum: Object.values(UserRole), default: UserRole.BUYER },
+    status: { type: String, enum: Object.values(UserStatus), default: UserStatus.ACTIVE },
     emailVerified: { type: Boolean, default: false },
     emailVerifyToken: { type: String, default: null, select: false },
     emailVerifyExpires: { type: Date, default: null, select: false },
     passwordResetToken: { type: String, default: null, select: false },
     passwordResetExpires: { type: Date, default: null, select: false },
-    twoFA: { type: TwoFASchema, default: () => ({ secret: '', enabled: false, backupCodes: [] }) },
+    refreshToken: { type: String, default: null, select: false },
+    refreshTokenExpires: { type: Date, default: null, select: false },
+    twoFA: {
+      type: TwoFASchema,
+      default: () => ({ secret: '', enabled: false, backupCodes: [] }),
+    },
     sellerProfile: { type: SellerProfileSchema, default: null },
     sellerMetrics: { type: SellerMetricsSchema, default: null },
     referralCode: { type: String, unique: true, sparse: true, index: true },
@@ -148,12 +145,10 @@ const UserSchema = new Schema<IUser>(
   { timestamps: true }
 );
 
-// Indexes
 UserSchema.index({ role: 1, status: 1 });
 UserSchema.index({ 'sellerProfile.applicationStatus': 1 });
 UserSchema.index({ createdAt: -1 });
 
-// Hash password before saving
 UserSchema.pre('save', async function (next) {
   if (!this.isModified('passwordHash')) return next();
   this.passwordHash = await bcrypt.hash(this.passwordHash, 12);
@@ -168,17 +163,22 @@ UserSchema.methods.isActive = function (): boolean {
   return this.status === UserStatus.ACTIVE;
 };
 
-// Never leak passwordHash, twoFA secret, or tokens in JSON responses
 UserSchema.set('toJSON', {
-  transform: (_doc, ret: Partial<IUser>) => {
-    delete ret.passwordHash;
-    delete ret.emailVerifyToken;
-    delete ret.emailVerifyExpires;
-    delete ret.passwordResetToken;
-    delete ret.passwordResetExpires;
-    if (ret.twoFA) delete ret.twoFA.secret;
-    if (ret.twoFA) delete ret.twoFA.backupCodes;
-    return ret;
+  transform: (_doc, ret) => {
+    const r = ret as unknown as Record<string, unknown>;
+    delete r['passwordHash'];
+    delete r['emailVerifyToken'];
+    delete r['emailVerifyExpires'];
+    delete r['passwordResetToken'];
+    delete r['passwordResetExpires'];
+    delete r['refreshToken'];
+    delete r['refreshTokenExpires'];
+    if (r['twoFA']) {
+      const twoFA = r['twoFA'] as Record<string, unknown>;
+      delete twoFA['secret'];
+      delete twoFA['backupCodes'];
+    }
+    return r;
   },
 });
 

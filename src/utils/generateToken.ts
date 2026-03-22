@@ -1,15 +1,28 @@
-// utils/generateToken.ts
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import env from '../config/env';
 
-export const generateToken = (userId: string): string => {
-  return jwt.sign({ userId }, env.JWT_SECRET as jwt.Secret, {
-    expiresIn: env.JWT_EXPIRE as jwt.SignOptions['expiresIn'],
-  });
+export interface JwtPayload {
+  userId: string;
+  role: string;
+}
+
+export const generateAccessToken = (payload: JwtPayload): string => {
+  return jwt.sign(payload, env.JWT_SECRET, { expiresIn: '15m' });
 };
 
-export const verifyToken = (token: string): any => {
-  return jwt.verify(token, env.JWT_SECRET);
+export const generateRefreshToken = (payload: JwtPayload): string => {
+  return jwt.sign(payload, env.JWT_SECRET, { expiresIn: '7d' });
 };
 
-export default generateToken;
+export const verifyToken = (token: string): JwtPayload => {
+  return jwt.verify(token, env.JWT_SECRET) as JwtPayload;
+};
+
+export const generateCryptoToken = (): string => {
+  return crypto.randomBytes(32).toString('hex');
+};
+
+export const hashToken = (token: string): string => {
+  return crypto.createHash('sha256').update(token).digest('hex');
+};

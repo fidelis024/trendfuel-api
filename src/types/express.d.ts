@@ -1,4 +1,4 @@
-import { IUser } from '../modules/users/user.model';
+import { IUser } from '../schemas/mongoose/user.model';
 
 declare global {
   namespace Express {
@@ -7,3 +7,5 @@ declare global {
     }
   }
 }
+
+export {};
