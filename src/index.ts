@@ -1,6 +1,5 @@
 import express from 'express';
 import helmet from 'helmet';
-import cors from 'cors';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import morgan from 'morgan';
@@ -17,12 +16,15 @@ import errorHandler from './middlewares/errorHandler';
 import logger from './utils/logger';
 import apiRoutes from './modules/index';
 import { initCronJobs } from './utils/cron';
+import cors from 'cors';
+import { corsOptions } from './config/cors';
 
 const app = express();
 
 // Security middleware
 app.use(helmet());
-app.use(cors());
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // handle preflight on all routes
 app.use(compression());
 app.use(xss());
 app.use(hpp());
