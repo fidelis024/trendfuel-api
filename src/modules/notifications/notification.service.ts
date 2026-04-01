@@ -1,5 +1,5 @@
 // notifications/notification.service.ts
-import Notification, { INotification } from '../../schemas/mongoose/notification.model';
+import { Notification, INotification } from '../../schemas/mongoose/notification.model';
 
 export class NotificationService {
   async createNotification(notificationData: any): Promise<INotification> {

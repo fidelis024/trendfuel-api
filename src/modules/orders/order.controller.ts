@@ -23,7 +23,7 @@ export const getOrders = asyncHandler(async (req: Request, res: Response) => {
     req.query as any
   );
 
-  res.status(200).json(new ApiResponse(200, 'Orders fetched successfully', orders, pagination));
+  res.status(200).json(new ApiResponse(200, 'Orders fetched successfully', { orders, pagination }));
 });
 
 // GET /api/v1/orders/:id
@@ -31,7 +31,7 @@ export const getOrderById = asyncHandler(async (req: Request, res: Response) => 
   if (!req.user) throw ApiError.unauthorized('Authentication required');
 
   const order = await orderService.getOrderById(
-    req.params.id,
+    req.params.id as string,
     req.user._id.toString(),
     req.user.role
   );
@@ -44,7 +44,7 @@ export const deliverOrder = asyncHandler(async (req: Request, res: Response) => 
   if (!req.user) throw ApiError.unauthorized('Authentication required');
 
   const order = await orderService.deliverOrder(
-    req.params.id,
+    req.params.id as string,
     req.user._id.toString(),
     req.body.deliveryLink
   );
@@ -56,7 +56,7 @@ export const deliverOrder = asyncHandler(async (req: Request, res: Response) => 
 export const completeOrder = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw ApiError.unauthorized('Authentication required');
 
-  const order = await orderService.completeOrder(req.params.id, req.user._id.toString());
+  const order = await orderService.completeOrder(req.params.id as string, req.user._id.toString());
 
   res.status(200).json(new ApiResponse(200, 'Order completed. Payment released to seller.', order));
 });
@@ -66,7 +66,7 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw ApiError.unauthorized('Authentication required');
 
   const order = await orderService.cancelOrder(
-    req.params.id,
+    req.params.id as string,
     req.user._id.toString(),
     req.user.role
   );

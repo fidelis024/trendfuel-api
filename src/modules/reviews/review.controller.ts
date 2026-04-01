@@ -17,36 +17,35 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
 export const getSellerReviews = asyncHandler(async (req: Request, res: Response) => {
   const { sellerId } = req.params;
   const { reviews, summary, pagination } = await reviewService.getSellerReviews(
-    sellerId,
+    sellerId as string,
     req.query as any
   );
 
-  res.status(200).json(
-    new ApiResponse(200, 'Seller reviews fetched successfully', { reviews, summary }, pagination)
-  );
+  res
+    .status(200)
+    .json(
+      new ApiResponse(200, 'Seller reviews fetched successfully', { reviews, summary, pagination })
+    );
 });
 
 // GET /api/v1/reviews/service/:serviceId — public
 export const getServiceReviews = asyncHandler(async (req: Request, res: Response) => {
   const { serviceId } = req.params;
   const { reviews, pagination } = await reviewService.getServiceReviews(
-    serviceId,
+    serviceId as string,
     req.query as any
   );
 
-  res.status(200).json(
-    new ApiResponse(200, 'Service reviews fetched successfully', reviews, pagination)
-  );
+  res
+    .status(200)
+    .json(new ApiResponse(200, 'Service reviews fetched successfully', { reviews, pagination }));
 });
 
 // GET /api/v1/reviews/order/:orderId — buyer (their own review)
 export const getMyReview = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw ApiError.unauthorized('Authentication required');
 
-  const review = await reviewService.getMyReview(
-    req.params.orderId,
-    req.user._id.toString()
-  );
+  const review = await reviewService.getMyReview(req.params.orderId as string, req.user._id.toString());
 
   res.status(200).json(new ApiResponse(200, 'Review fetched successfully', review));
 });
@@ -55,7 +54,7 @@ export const getMyReview = asyncHandler(async (req: Request, res: Response) => {
 export const deleteReview = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw ApiError.unauthorized('Authentication required');
 
-  await reviewService.deleteReview(req.params.id, req.user._id.toString());
+  await reviewService.deleteReview(req.params.id as string, req.user._id.toString());
 
   res.status(200).json(new ApiResponse(200, 'Review deleted successfully'));
 });

@@ -23,7 +23,7 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
 // GET /api/v1/auth/verify-email/:token
 export const verifyEmail = asyncHandler(async (req: Request, res: Response) => {
   const { token } = req.params;
-  await authService.verifyEmail(token);
+  await authService.verifyEmail(token as string);
 
   res.status(200).json(new ApiResponse(200, 'Email verified successfully. You can now log in.'));
 });
@@ -90,7 +90,7 @@ export const resetPassword = asyncHandler(async (req: Request, res: Response) =>
   const { token } = req.params;
   const { password } = req.body;
 
-  await authService.resetPassword(token, password);
+  await authService.resetPassword(token as string, password);
 
   res
     .status(200)

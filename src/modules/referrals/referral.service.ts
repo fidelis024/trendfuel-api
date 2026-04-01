@@ -1,5 +1,5 @@
 // referrals/referral.service.ts
-import Referral, { IReferral } from '../../schemas/mongoose/referral.model';
+import { Referral, IReferral } from '../../schemas/mongoose/referral.model';
 
 export class ReferralService {
   async createReferral(referrerId: string, refereeId: string): Promise<IReferral> {

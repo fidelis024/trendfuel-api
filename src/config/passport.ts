@@ -21,25 +21,4 @@ passport.use(
   )
 );
 
-// Google OAuth Strategy
-if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
-  passport.use(
-    new GoogleStrategy(
-      {
-        clientID: env.GOOGLE_CLIENT_ID,
-        clientSecret: env.GOOGLE_CLIENT_SECRET,
-        callbackURL: env.GOOGLE_CALLBACK_URL,
-      },
-      async (accessToken, refreshToken, profile, done) => {
-        try {
-          // User lookup/creation logic here
-          return done(null, profile as any);
-        } catch (error) {
-          return done(error as Error);
-        }
-      }
-    )
-  );
-}
-
 export default passport;

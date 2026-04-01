@@ -18,7 +18,7 @@ export const sellerRespond = asyncHandler(async (req: Request, res: Response) =>
   if (!req.user) throw ApiError.unauthorized('Authentication required');
 
   const dispute = await disputeService.sellerRespond(
-    req.params.id,
+    req.params.id as string,
     req.user._id.toString(),
     req.body
   );
@@ -31,10 +31,10 @@ export const uploadEvidence = asyncHandler(async (req: Request, res: Response) =
   if (!req.user) throw ApiError.unauthorized('Authentication required');
   if (!req.file) throw ApiError.badRequest('No file uploaded');
 
-  const role = req.user.role === 'buyer' ? 'buyer' : 'seller';
+  const role = req.user.role === 'seller' ? 'seller' : 'buyer';
 
   const evidence = await disputeService.uploadEvidence(
-    req.params.id,
+    req.params.id as string,
     req.user._id.toString(),
     role,
     req.file
@@ -53,7 +53,7 @@ export const getDisputes = asyncHandler(async (req: Request, res: Response) => {
     req.query as any
   );
 
-  res.status(200).json(new ApiResponse(200, 'Disputes fetched successfully', disputes, pagination));
+  res.status(200).json(new ApiResponse(200, 'Disputes fetched successfully', { disputes, pagination }));
 });
 
 // GET /api/v1/disputes/:id — buyer/seller/admin
@@ -61,7 +61,7 @@ export const getDisputeById = asyncHandler(async (req: Request, res: Response) =
   if (!req.user) throw ApiError.unauthorized('Authentication required');
 
   const { dispute, evidence } = await disputeService.getDisputeById(
-    req.params.id,
+    req.params.id as string,
     req.user._id.toString(),
     req.user.role
   );
@@ -74,7 +74,7 @@ export const resolveDispute = asyncHandler(async (req: Request, res: Response) =
   if (!req.user) throw ApiError.unauthorized('Authentication required');
 
   const dispute = await disputeService.resolveDispute(
-    req.params.id,
+    req.params.id as string,
     req.user._id.toString(),
     req.body
   );

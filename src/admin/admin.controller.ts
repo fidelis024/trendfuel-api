@@ -9,18 +9,18 @@ import * as adminService from './admin.service';
 // GET /api/v1/admin/users
 export const getUsers = asyncHandler(async (req: Request, res: Response) => {
   const { users, pagination } = await adminService.getUsers(req.query as any);
-  res.status(200).json(new ApiResponse(200, 'Users fetched successfully', users, pagination));
+  res.status(200).json(new ApiResponse(200, 'Users fetched successfully', { users, pagination }));
 });
 
 // GET /api/v1/admin/users/:id
 export const getUserById = asyncHandler(async (req: Request, res: Response) => {
-  const result = await adminService.getUserById(req.params.id);
+  const result = await adminService.getUserById(req.params.id as string);
   res.status(200).json(new ApiResponse(200, 'User fetched successfully', result));
 });
 
 // PATCH /api/v1/admin/users/:id/status
 export const updateUserStatus = asyncHandler(async (req: Request, res: Response) => {
-  const user = await adminService.updateUserStatus(req.params.id, req.body);
+  const user = await adminService.updateUserStatus(req.params.id as string, req.body);
   res.status(200).json(new ApiResponse(200, 'User status updated successfully', user));
 });
 
@@ -33,12 +33,12 @@ export const getSellerApplications = asyncHandler(async (req: Request, res: Resp
   const { applicants, pagination } = await adminService.getSellerApplications(page, limit);
   res
     .status(200)
-    .json(new ApiResponse(200, 'Seller applications fetched successfully', applicants, pagination));
+    .json(new ApiResponse(200, 'Seller applications fetched successfully', { applicants, pagination }));
 });
 
 // PATCH /api/v1/admin/seller-applications/:id
 export const handleSellerApplication = asyncHandler(async (req: Request, res: Response) => {
-  const user = await adminService.handleSellerApplication(req.params.id, req.body);
+  const user = await adminService.handleSellerApplication(req.params.id as string, req.body);
   const msg =
     req.body.action === 'approve' ? 'Seller application approved' : 'Seller application rejected';
   res.status(200).json(new ApiResponse(200, msg, user));
@@ -54,19 +54,19 @@ export const getAllServices = asyncHandler(async (req: Request, res: Response) =
     req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined;
 
   const { services, pagination } = await adminService.getAllServices(page, limit, isActive);
-  res.status(200).json(new ApiResponse(200, 'Services fetched successfully', services, pagination));
+  res.status(200).json(new ApiResponse(200, 'Services fetched successfully', { services, pagination }));
 });
 
 // PATCH /api/v1/admin/services/:id/feature
 export const featureService = asyncHandler(async (req: Request, res: Response) => {
-  const service = await adminService.featureService(req.params.id, req.body);
+  const service = await adminService.featureService(req.params.id as string, req.body);
   const msg = req.body.isFeatured ? 'Service featured successfully' : 'Service unfeatured';
   res.status(200).json(new ApiResponse(200, msg, service));
 });
 
 // DELETE /api/v1/admin/services/:id
 export const deleteService = asyncHandler(async (req: Request, res: Response) => {
-  await adminService.adminDeleteService(req.params.id);
+  await adminService.adminDeleteService(req.params.id as string);
   res.status(200).json(new ApiResponse(200, 'Service deactivated successfully'));
 });
 
@@ -79,7 +79,7 @@ export const getAllOrders = asyncHandler(async (req: Request, res: Response) => 
   const status = req.query.status as string | undefined;
 
   const { orders, pagination } = await adminService.getAllOrders(page, limit, status);
-  res.status(200).json(new ApiResponse(200, 'Orders fetched successfully', orders, pagination));
+  res.status(200).json(new ApiResponse(200, 'Orders fetched successfully', { orders, pagination }));
 });
 
 // ─── Analytics ────────────────────────────────────────────────────────────────

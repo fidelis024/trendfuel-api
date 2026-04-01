@@ -28,7 +28,7 @@ export const createService = asyncHandler(async (req: Request, res: Response) =>
 // GET /api/v1/services — public
 export const getServices = asyncHandler(async (req: Request, res: Response) => {
   const { services, pagination } = await serviceService.getServices(req.query as any);
-  res.status(200).json(new ApiResponse(200, 'Services fetched successfully', services, pagination));
+  res.status(200).json(new ApiResponse(200, 'Services fetched successfully', { services, pagination }));
 });
 
 // GET /api/v1/services/my — seller only
@@ -46,12 +46,12 @@ export const getMyServices = asyncHandler(async (req: Request, res: Response) =>
 
   res
     .status(200)
-    .json(new ApiResponse(200, 'Your services fetched successfully', services, pagination));
+    .json(new ApiResponse(200, 'Your services fetched successfully', { services, pagination }));
 });
 
 // GET /api/v1/services/:id — public
 export const getServiceById = asyncHandler(async (req: Request, res: Response) => {
-  const service = await serviceService.getServiceById(req.params.id);
+  const service = await serviceService.getServiceById(req.params.id as string);
   res.status(200).json(new ApiResponse(200, 'Service fetched successfully', service));
 });
 
@@ -60,7 +60,7 @@ export const updateService = asyncHandler(async (req: Request, res: Response) =>
   if (!req.user) throw ApiError.unauthorized('Authentication required');
 
   const service = await serviceService.updateService(
-    req.params.id,
+    req.params.id as string,
     req.user._id.toString(),
     req.body
   );
@@ -72,7 +72,7 @@ export const updateService = asyncHandler(async (req: Request, res: Response) =>
 export const deleteService = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw ApiError.unauthorized('Authentication required');
 
-  await serviceService.deleteService(req.params.id, req.user._id.toString());
+  await serviceService.deleteService(req.params.id as string, req.user._id.toString());
 
   res.status(200).json(new ApiResponse(200, 'Service deleted successfully'));
 });
