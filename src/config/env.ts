@@ -11,6 +11,7 @@ const envSchema = z.object({
   JWT_EXPIRE: z.string().default('7d'),
   RESEND_API_KEY: z.string().optional(),
   API_URL: z.string().url(),
+  APP_URL: z.string().url(),
   PLATFORM_COMMISSION_RATE: z.coerce.number().default(0.15),
   ORDER_AUTO_COMPLETE_HOURS: z.coerce.number().default(72),
   SELLER_RESPOND_HOURS: z.coerce.number().default(48),

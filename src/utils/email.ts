@@ -60,7 +60,7 @@ const sendEmail = async (to: string, subject: string, html: string, context: str
 };
 
 export const sendVerificationEmail = async (email: string, token: string, firstName: string) => {
-  const verifyUrl = `${env.API_URL}/api/v1/auth/verify-email/${token}`;
+  const verifyUrl = `${env.APP_URL}/confirm-account?token=${token}`;
   await sendEmail(
     email,
     'Verify your TrendFuel account',
@@ -76,7 +76,7 @@ export const sendVerificationEmail = async (email: string, token: string, firstN
 };
 
 export const sendPasswordResetEmail = async (email: string, token: string, firstName: string) => {
-  const resetUrl = `${env.API_URL}/reset-password/${token}`;
+  const resetUrl = `${env.APP_URL}/reset-password/${token}`;
   await sendEmail(
     email,
     'Reset your TrendFuel password',

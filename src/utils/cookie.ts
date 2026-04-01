@@ -7,15 +7,11 @@ const COOKIE_OPTIONS = {
   sameSite: 'strict' as const,
 };
 
-export const setAuthCookies = (
-  res: Response,
-  accessToken: string,
-  refreshToken: string
-): void => {
+export const setAuthCookies = (res: Response, accessToken: string, refreshToken: string): void => {
   // Access token — 15 minutes
   res.cookie('accessToken', accessToken, {
     ...COOKIE_OPTIONS,
-    maxAge: 15 * 60 * 1000,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 
   // Refresh token — 7 days
