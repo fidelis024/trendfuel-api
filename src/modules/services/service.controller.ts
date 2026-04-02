@@ -28,7 +28,9 @@ export const createService = asyncHandler(async (req: Request, res: Response) =>
 // GET /api/v1/services — public
 export const getServices = asyncHandler(async (req: Request, res: Response) => {
   const { services, pagination } = await serviceService.getServices(req.query as any);
-  res.status(200).json(new ApiResponse(200, 'Services fetched successfully', { services, pagination }));
+  res
+    .status(200)
+    .json(new ApiResponse(200, 'Services fetched successfully', { services, pagination }));
 });
 
 // GET /api/v1/services/my — seller only
@@ -75,4 +77,16 @@ export const deleteService = asyncHandler(async (req: Request, res: Response) =>
   await serviceService.deleteService(req.params.id as string, req.user._id.toString());
 
   res.status(200).json(new ApiResponse(200, 'Service deleted successfully'));
+});
+
+// PATCH /api/v1/services/categories/:id — admin only
+export const updateCategory = asyncHandler(async (req: Request, res: Response) => {
+  const category = await serviceService.updateCategory(req.params.id as string, req.body);
+  res.status(200).json(new ApiResponse(200, 'Category updated successfully', category));
+});
+
+// DELETE /api/v1/services/categories/:id — admin only
+export const deleteCategory = asyncHandler(async (req: Request, res: Response) => {
+  await serviceService.deleteCategory(req.params.id as string);
+  res.status(200).json(new ApiResponse(200, 'Category deactivated successfully'));
 });

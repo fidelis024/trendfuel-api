@@ -146,3 +146,30 @@ export const deleteService = async (serviceId: string, sellerId: string) => {
   service.isActive = false;
   await service.save();
 };
+
+// ─── Update Category ──────────────────────────────────────────────────────────
+
+export const updateCategory = async (categoryId: string, data: Partial<CreateCategoryInput>) => {
+  const category = await Category.findById(categoryId);
+  if (!category) throw ApiError.notFound('Category not found');
+
+  if (data.slug && data.slug !== category.slug) {
+    const slugExists = await Category.findOne({ slug: data.slug, _id: { $ne: categoryId } });
+    if (slugExists) throw ApiError.conflict('A category with this slug already exists');
+  }
+
+  Object.assign(category, data);
+  await category.save();
+  return category;
+};
+
+// ─── Delete Category ──────────────────────────────────────────────────────────
+
+export const deleteCategory = async (categoryId: string) => {
+  const category = await Category.findById(categoryId);
+  if (!category) throw ApiError.notFound('Category not found');
+
+  // Soft delete — deactivate so existing services still resolve
+  category.isActive = false;
+  await category.save();
+};

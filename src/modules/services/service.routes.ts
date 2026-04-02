@@ -8,6 +8,8 @@ import {
   getServicesSchema,
   serviceIdSchema,
   createCategorySchema,
+  updateCategorySchema,
+  categoryIdSchema,
 } from '../../schemas/zod/service.schema';
 import * as serviceController from './service.controller';
 
@@ -24,7 +26,7 @@ const router = Router();
  * @swagger
  * /services/categories:
  *   get:
- *     summary: Get all active categories (optionally filtered by platform)
+ *     summary: Get all active categories
  *     tags: [Services]
  *     parameters:
  *       - in: query
@@ -54,15 +56,9 @@ router.get('/categories', serviceController.getCategories);
  *             type: object
  *             required: [platform, name, slug]
  *             properties:
- *               platform:
- *                 type: string
- *                 example: instagram
- *               name:
- *                 type: string
- *                 example: Instagram Followers
- *               slug:
- *                 type: string
- *                 example: instagram-followers
+ *               platform: { type: string, example: instagram }
+ *               name: { type: string, example: Instagram Followers }
+ *               slug: { type: string, example: instagram-followers }
  *     responses:
  *       201:
  *         description: Category created
@@ -75,6 +71,73 @@ router.post(
   authorize('admin'),
   validate(createCategorySchema),
   serviceController.createCategory
+);
+
+/**
+ * @swagger
+ * /services/categories/{id}:
+ *   patch:
+ *     summary: Update a category (admin only)
+ *     tags: [Services]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               platform: { type: string }
+ *               name: { type: string }
+ *               slug: { type: string }
+ *               isActive: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Category updated
+ *       404:
+ *         description: Category not found
+ *       409:
+ *         description: Slug already exists
+ */
+router.patch(
+  '/categories/:id',
+  authenticate,
+  authorize('admin'),
+  validate(updateCategorySchema),
+  serviceController.updateCategory
+);
+
+/**
+ * @swagger
+ * /services/categories/{id}:
+ *   delete:
+ *     summary: Deactivate a category (admin only)
+ *     tags: [Services]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Category deactivated
+ *       404:
+ *         description: Category not found
+ */
+router.delete(
+  '/categories/:id',
+  authenticate,
+  authorize('admin'),
+  validate(categoryIdSchema),
+  serviceController.deleteCategory
 );
 
 /**
@@ -93,7 +156,6 @@ router.post(
  *       - in: query
  *         name: category
  *         schema: { type: string }
- *         description: Category ID
  *       - in: query
  *         name: platform
  *         schema: { type: string }
@@ -183,46 +245,19 @@ router.get('/:id', validate(serviceIdSchema), serviceController.getServiceById);
  *             type: object
  *             required: [categoryId, title, description, pricePerUnit, minQty, maxQty, deliveryHours]
  *             properties:
- *               categoryId:
- *                 type: string
- *               title:
- *                 type: string
- *                 example: 1000 Instagram Followers - High Quality
- *               description:
- *                 type: string
- *                 example: Real-looking followers delivered within 24 hours
- *               pricePerUnit:
- *                 type: integer
- *                 example: 500
- *                 description: Price in cents (500 = $5.00)
- *               minQty:
- *                 type: integer
- *                 example: 100
- *               maxQty:
- *                 type: integer
- *                 example: 10000
- *               deliveryHours:
- *                 type: integer
- *                 example: 24
+ *               categoryId: { type: string }
+ *               title: { type: string, example: 1000 Instagram Followers }
+ *               description: { type: string }
+ *               pricePerUnit: { type: integer, example: 500 }
+ *               minQty: { type: integer, example: 100 }
+ *               maxQty: { type: integer, example: 10000 }
+ *               deliveryHours: { type: integer, example: 24 }
  *               tags:
  *                 type: array
- *                 items:
- *                   type: string
- *                 example: [instagram, followers, social]
- *               refillPolicy:
- *                 type: object
- *                 properties:
- *                   offered:
- *                     type: boolean
- *                   windowDays:
- *                     type: integer
- *                   conditions:
- *                     type: string
+ *                 items: { type: string }
  *     responses:
  *       201:
  *         description: Service created
- *       400:
- *         description: Validation error
  */
 router.post(
   '/',
@@ -259,14 +294,11 @@ router.post(
  *               maxQty: { type: integer }
  *               deliveryHours: { type: integer }
  *               isActive: { type: boolean }
- *               tags:
- *                 type: array
- *                 items: { type: string }
  *     responses:
  *       200:
  *         description: Service updated
  *       404:
- *         description: Service not found or not owned by seller
+ *         description: Not found or not owned
  */
 router.patch(
   '/:id',
@@ -280,7 +312,7 @@ router.patch(
  * @swagger
  * /services/{id}:
  *   delete:
- *     summary: Delete (deactivate) a service listing (seller must own it)
+ *     summary: Deactivate a service listing (seller must own it)
  *     tags: [Services]
  *     security:
  *       - bearerAuth: []
@@ -293,7 +325,7 @@ router.patch(
  *       200:
  *         description: Service deleted
  *       404:
- *         description: Service not found or not owned by seller
+ *         description: Not found or not owned
  */
 router.delete(
   '/:id',

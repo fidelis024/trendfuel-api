@@ -132,4 +132,38 @@ export const createCategorySchema = z.object({
 export type CreateServiceInput = z.infer<typeof createServiceSchema>['body'];
 export type UpdateServiceInput = z.infer<typeof updateServiceSchema>['body'];
 export type GetServicesQuery = z.infer<typeof getServicesSchema>['query'];
+export const updateCategorySchema = z.object({
+  params: z.object({ id: z.string().min(1) }),
+  body: z.object({
+    platform: z
+      .enum([
+        'instagram',
+        'tiktok',
+        'youtube',
+        'x',
+        'facebook',
+        'linkedin',
+        'snapchat',
+        'spotify',
+        'telegram',
+        'other',
+      ])
+      .optional(),
+    name: z.string().min(2).max(80).trim().optional(),
+    slug: z
+      .string()
+      .min(2)
+      .max(80)
+      .trim()
+      .toLowerCase()
+      .regex(/^[a-z0-9-]+$/, 'Slug can only contain lowercase letters, numbers, and hyphens')
+      .optional(),
+    isActive: z.boolean().optional(),
+  }),
+});
+
+export const categoryIdSchema = z.object({
+  params: z.object({ id: z.string().min(1, 'Category ID is required') }),
+});
+
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>['body'];
