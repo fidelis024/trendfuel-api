@@ -464,7 +464,7 @@ export const sendAnnouncement = async (data: AnnouncementInput) => {
     const batch = users.slice(i, i + BATCH_SIZE);
 
     await Promise.allSettled(
-      batch.map((user) =>
+      batch.map((user: { email: string }) =>
         resend.emails.send({
           from: FROM,
           to: user.email,
@@ -492,4 +492,108 @@ export const sendAnnouncement = async (data: AnnouncementInput) => {
   }
 
   return { sent, total: users.length };
+};
+
+// ─── Commission Settings ──────────────────────────────────────────────────────
+
+export const getCommissionSettings = async () => {
+  const { getConfig } = await import('../config/platformconfig');
+  const config = await getConfig();
+
+  // Calculate revenue breakdown
+  const revenueAgg = await Transaction.aggregate([
+    { $match: { type: 'commission', status: 'completed' } },
+    { $group: { _id: null, total: { $sum: '$amount' } } },
+  ]);
+  const totalRevenue = revenueAgg[0]?.total ?? 0;
+
+  const sellerEarningsAgg = await Transaction.aggregate([
+    { $match: { type: 'escrow_release', status: 'completed' } },
+    { $group: { _id: null, total: { $sum: '$amount' } } },
+  ]);
+  const totalSellerEarnings = sellerEarningsAgg[0]?.total ?? 0;
+
+  const grossRevenue = totalRevenue + totalSellerEarnings;
+
+  return {
+    config: {
+      commissionRate: config.commissionRate,
+      commissionPercent: `${(config.commissionRate * 100).toFixed(0)}%`,
+      sellerAccessFee: config.sellerAccessFee,
+      withdrawalFeeRate: config.withdrawalFeeRate,
+      orderAutoCompleteHours: config.orderAutoCompleteHours,
+      sellerRespondHours: config.sellerRespondHours,
+      withdrawalDelayDays: config.withdrawalDelayDays,
+      updatedBy: config.updatedBy,
+      updatedAt: config.updatedAt,
+    },
+    revenue: {
+      totalPlatformCommission: totalRevenue,
+      totalSellerEarnings: totalSellerEarnings,
+      grossRevenue,
+      platformPercent:
+        grossRevenue > 0 ? `${((totalRevenue / grossRevenue) * 100).toFixed(1)}%` : '0%',
+      sellerPercent:
+        grossRevenue > 0 ? `${((totalSellerEarnings / grossRevenue) * 100).toFixed(1)}%` : '0%',
+    },
+  };
+};
+
+export const updateCommissionSettings = async (
+  updates: Record<string, unknown>,
+  adminId: string
+) => {
+  const { updateConfig } = await import('../config/platformconfig');
+  return updateConfig(updates as any, adminId);
+};
+
+// ─── Admin Management ─────────────────────────────────────────────────────────
+
+export const getAllAdmins = async () => {
+  const admins = await User.find({
+    role: { $in: [UserRole.ADMIN, UserRole.SUPER_ADMIN ?? 'super_admin'] },
+  }).sort({ createdAt: -1 });
+
+  return admins;
+};
+
+export const makeAdmin = async (targetUserId: string, requesterId: string) => {
+  if (targetUserId === requesterId) {
+    throw ApiError.badRequest('You cannot modify your own admin status');
+  }
+
+  const user = await User.findById(targetUserId);
+  if (!user) throw ApiError.notFound('User not found');
+
+  if (user.role === 'admin' || user.role === 'super_admin') {
+    throw ApiError.conflict('User is already an admin');
+  }
+
+  user.role = UserRole.ADMIN;
+  await user.save();
+
+  return user;
+};
+
+export const removeAdmin = async (targetUserId: string, requesterId: string) => {
+  if (targetUserId === requesterId) {
+    throw ApiError.badRequest('You cannot remove your own admin status');
+  }
+
+  const user = await User.findById(targetUserId);
+  if (!user) throw ApiError.notFound('User not found');
+
+  if (user.role === 'super_admin') {
+    throw ApiError.forbidden('Cannot demote a super admin');
+  }
+
+  if (user.role !== 'admin') {
+    throw ApiError.badRequest('User is not an admin');
+  }
+
+  // Demote back to buyer
+  user.role = UserRole.BUYER;
+  await user.save();
+
+  return user;
 };

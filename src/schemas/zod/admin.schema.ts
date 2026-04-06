@@ -79,3 +79,28 @@ export type FeatureServiceInput = z.infer<typeof featureServiceSchema>['body'];
 export type GetUsersQuery = z.infer<typeof getUsersSchema>['query'];
 export type AnalyticsQuery = z.infer<typeof analyticsSchema>['query'];
 export type AnnouncementInput = z.infer<typeof announcementSchema>['body'];
+
+export const updateCommissionSchema = z.object({
+  body: z
+    .object({
+      commissionRate: z.number().min(0.01).max(0.5).optional(),
+      sellerAccessFee: z.number().min(0).optional(),
+      withdrawalFeeRate: z.number().min(0).max(0.2).optional(),
+      orderAutoCompleteHours: z.number().min(1).max(168).optional(),
+      sellerRespondHours: z.number().min(1).max(168).optional(),
+      withdrawalDelayDays: z.number().min(0).max(30).optional(),
+    })
+    .refine((data) => Object.keys(data).length > 0, {
+      message: 'At least one field must be provided',
+    }),
+});
+
+export const makeAdminSchema = z.object({
+  params: z.object({ id: z.string().min(1) }),
+});
+
+export const removeAdminSchema = z.object({
+  params: z.object({ id: z.string().min(1) }),
+});
+
+export type UpdateCommissionInput = z.infer<typeof updateCommissionSchema>['body'];

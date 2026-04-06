@@ -14,8 +14,11 @@ import {
 } from '../../utils/email';
 import env from '../../config/env';
 import type { PlaceOrderInput, GetOrdersQuery } from '../../schemas/zod/order.schema';
+import { getConfig } from '../../config/platformconfig';
 
-const COMMISSION_RATE = env.PLATFORM_COMMISSION_RATE ?? 0.15;
+// const { getConfig } = await import('../../config/platformconfig');
+const config = getConfig();
+const COMMISSION_RATE = config.commissionRate;
 const AUTO_COMPLETE_HOURS = env.ORDER_AUTO_COMPLETE_HOURS ?? 72;
 
 // ─── Ensure Wallet Exists ─────────────────────────────────────────────────────
@@ -43,9 +46,7 @@ export const placeOrder = async (buyerId: string, data: PlaceOrderInput) => {
     if (service.sellerId.toString() === buyerId)
       throw ApiError.badRequest('You cannot order your own service');
     if (data.quantity < service.minQty || data.quantity > service.maxQty) {
-      throw ApiError.badRequest(
-        `Quantity must be between ${service.minQty} and ${service.maxQty}`
-      );
+      throw ApiError.badRequest(`Quantity must be between ${service.minQty} and ${service.maxQty}`);
     }
 
     // Calculate amounts
@@ -106,11 +107,7 @@ export const placeOrder = async (buyerId: string, data: PlaceOrderInput) => {
 
 // ─── Get Orders ───────────────────────────────────────────────────────────────
 
-export const getOrders = async (
-  userId: string,
-  role: string,
-  query: GetOrdersQuery
-) => {
+export const getOrders = async (userId: string, role: string, query: GetOrdersQuery) => {
   const { page, limit, status } = query;
   const { skip } = getPaginationOptions(page, limit);
 
@@ -156,8 +153,10 @@ export const getOrderById = async (orderId: string, userId: string, role: string
 // ─── Mark as Delivered ────────────────────────────────────────────────────────
 
 export const deliverOrder = async (orderId: string, sellerId: string, deliveryLink: string) => {
-  const order = await Order.findOne({ _id: orderId, sellerId })
-    .populate('buyerId', 'firstName lastName email');
+  const order = await Order.findOne({ _id: orderId, sellerId }).populate(
+    'buyerId',
+    'firstName lastName email'
+  );
 
   if (!order) throw ApiError.notFound('Order not found or you do not own this order');
   if (order.status !== OrderStatus.PENDING && order.status !== OrderStatus.PROCESSING) {

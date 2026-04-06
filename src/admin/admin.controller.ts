@@ -98,3 +98,40 @@ export const sendAnnouncement = asyncHandler(async (req: Request, res: Response)
   const result = await adminService.sendAnnouncement(req.body);
   res.status(200).json(new ApiResponse(200, `Announcement sent to ${result.sent} users`, result));
 });
+
+// ─── Commission ───────────────────────────────────────────────────────────────
+
+// GET /api/v1/admin/commissions
+export const getCommissionSettings = asyncHandler(async (req: Request, res: Response) => {
+  const data = await adminService.getCommissionSettings();
+  res.status(200).json(new ApiResponse(200, 'Commission settings fetched successfully', data));
+});
+
+// PATCH /api/v1/admin/commissions
+export const updateCommissionSettings = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) throw ApiError.unauthorized('Authentication required');
+  const config = await adminService.updateCommissionSettings(req.body, req.user._id.toString());
+  res.status(200).json(new ApiResponse(200, 'Commission settings updated successfully', config));
+});
+
+// ─── Admin Management ─────────────────────────────────────────────────────────
+
+// GET /api/v1/admin/management
+export const getAllAdmins = asyncHandler(async (req: Request, res: Response) => {
+  const admins = await adminService.getAllAdmins();
+  res.status(200).json(new ApiResponse(200, 'Admins fetched successfully', admins));
+});
+
+// PATCH /api/v1/admin/users/:id/make-admin
+export const makeAdmin = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) throw ApiError.unauthorized('Authentication required');
+  const user = await adminService.makeAdmin(req.params.id as string, req.user._id.toString());
+  res.status(200).json(new ApiResponse(200, 'User promoted to admin successfully', user));
+});
+
+// PATCH /api/v1/admin/users/:id/remove-admin
+export const removeAdmin = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) throw ApiError.unauthorized('Authentication required');
+  const user = await adminService.removeAdmin(req.params.id as string, req.user._id.toString());
+  res.status(200).json(new ApiResponse(200, 'Admin demoted to buyer successfully', user));
+});

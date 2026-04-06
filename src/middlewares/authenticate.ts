@@ -20,17 +20,29 @@ export const authenticate = asyncHandler(
     if (!user) throw ApiError.unauthorized('User no longer exists');
     if (!user.isActive()) throw ApiError.forbidden('Account is suspended');
 
-    // IUser extends Document so this assignment is safe
     req.user = user as unknown as Express.Request['user'];
     next();
   }
 );
 
+// super_admin bypasses all role checks automatically
 export const authorize = (...roles: string[]) =>
   asyncHandler(async (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) throw ApiError.unauthorized('Authentication required');
+    if ((req.user.role as string) === 'super_admin') return next();
     if (!roles.includes(req.user.role)) {
       throw ApiError.forbidden('You do not have permission to perform this action');
     }
     next();
   });
+
+// Middleware specifically for super_admin only routes
+export const superAdminOnly = asyncHandler(
+  async (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.user) throw ApiError.unauthorized('Authentication required');
+    if ((req.user.role as string) !== 'super_admin') {
+      throw ApiError.forbidden('This action requires super admin privileges');
+    }
+    next();
+  }
+);

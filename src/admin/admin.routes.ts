@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../middlewares/authenticate';
-import { authorize } from '../middlewares/authenticate';
+import { authorize, superAdminOnly } from '../middlewares/authenticate';
 import { validate } from '../middlewares/validate';
 import {
   updateUserStatusSchema,
@@ -12,13 +12,15 @@ import {
   announcementSchema,
   userIdParamSchema,
   serviceIdParamSchema,
+  updateCommissionSchema,
+  makeAdminSchema,
+  removeAdminSchema,
 } from '../schemas/zod/admin.schema';
 import * as adminController from './admin.controller';
 
 const router = Router();
 
-// All admin routes require authentication + admin role
-router.use(authenticate, authorize('admin'));
+router.use(authenticate, authorize('admin', 'super_admin'));
 
 /**
  * @swagger
@@ -43,17 +45,16 @@ router.use(authenticate, authorize('admin'));
  *         schema: { type: integer, default: 1 }
  *       - in: query
  *         name: limit
- *         schema: { type: integer, default: 20 }
+ *         schema: { type: integer, default: 50 }
  *       - in: query
  *         name: role
- *         schema: { type: string, enum: [admin, buyer, seller] }
+ *         schema: { type: string, enum: [admin, buyer, seller, super_admin] }
  *       - in: query
  *         name: status
  *         schema: { type: string, enum: [active, suspended, banned, pending] }
  *       - in: query
  *         name: search
  *         schema: { type: string }
- *         description: Search by name or email
  *     responses:
  *       200:
  *         description: Paginated user list
@@ -76,8 +77,6 @@ router.get('/users', validate(getUsersSchema), adminController.getUsers);
  *     responses:
  *       200:
  *         description: User detail with wallet and stats
- *       404:
- *         description: User not found
  */
 router.get('/users/:id', validate(userIdParamSchema), adminController.getUserById);
 
@@ -85,7 +84,7 @@ router.get('/users/:id', validate(userIdParamSchema), adminController.getUserByI
  * @swagger
  * /admin/users/{id}/status:
  *   patch:
- *     summary: Update user status (suspend, ban, or reactivate)
+ *     summary: Suspend, ban, or reactivate a user
  *     tags: [Admin]
  *     security:
  *       - bearerAuth: []
@@ -117,6 +116,78 @@ router.patch(
   adminController.updateUserStatus
 );
 
+/**
+ * @swagger
+ * /admin/users/{id}/make-admin:
+ *   patch:
+ *     summary: Promote a user to admin (super_admin only)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: User promoted to admin
+ *       400:
+ *         description: User is already an admin
+ *       404:
+ *         description: User not found
+ */
+router.patch(
+  '/users/:id/make-admin',
+  superAdminOnly,
+  validate(makeAdminSchema),
+  adminController.makeAdmin
+);
+
+/**
+ * @swagger
+ * /admin/users/{id}/remove-admin:
+ *   patch:
+ *     summary: Demote an admin back to buyer (super_admin only)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Admin demoted to buyer
+ *       400:
+ *         description: User is not an admin
+ *       403:
+ *         description: Cannot demote a super admin
+ */
+router.patch(
+  '/users/:id/remove-admin',
+  superAdminOnly,
+  validate(removeAdminSchema),
+  adminController.removeAdmin
+);
+
+// ─── Admin Management ─────────────────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /admin/management:
+ *   get:
+ *     summary: Get all admin accounts (super_admin only)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of all admin and super_admin accounts
+ */
+router.get('/management', superAdminOnly, adminController.getAllAdmins);
+
 // ─── Seller Applications ──────────────────────────────────────────────────────
 
 /**
@@ -127,13 +198,6 @@ router.patch(
  *     tags: [Admin]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
- *       - in: query
- *         name: limit
- *         schema: { type: integer, default: 20 }
  *     responses:
  *       200:
  *         description: Pending seller applications
@@ -166,10 +230,9 @@ router.get('/seller-applications', adminController.getSellerApplications);
  *                 enum: [approve, reject]
  *               reason:
  *                 type: string
- *                 description: Required if rejecting
  *     responses:
  *       200:
- *         description: Application processed, seller notified by email
+ *         description: Application processed
  */
 router.patch(
   '/seller-applications/:id',
@@ -177,111 +240,83 @@ router.patch(
   adminController.handleSellerApplication
 );
 
-// ─── Services ─────────────────────────────────────────────────────────────────
+// ─── Commission Settings ──────────────────────────────────────────────────────
 
 /**
  * @swagger
- * /admin/services:
+ * /admin/commissions:
  *   get:
- *     summary: Get all services including inactive ones
+ *     summary: Get current commission settings and revenue breakdown
  *     tags: [Admin]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
- *       - in: query
- *         name: limit
- *         schema: { type: integer, default: 20 }
- *       - in: query
- *         name: isActive
- *         schema: { type: boolean }
  *     responses:
  *       200:
- *         description: All services
+ *         description: Commission config + platform/seller revenue split
  */
-router.get('/services', adminController.getAllServices);
+router.get('/commissions', adminController.getCommissionSettings);
 
 /**
  * @swagger
- * /admin/services/{id}/feature:
+ * /admin/commissions:
  *   patch:
- *     summary: Feature or unfeature a service listing
+ *     summary: Update commission settings (super_admin only)
  *     tags: [Admin]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [isFeatured]
  *             properties:
- *               isFeatured:
- *                 type: boolean
- *                 example: true
+ *               commissionRate:
+ *                 type: number
+ *                 description: 0.01 to 0.50 (1% to 50%)
+ *                 example: 0.20
+ *               sellerAccessFee:
+ *                 type: integer
+ *                 description: In cents
+ *                 example: 1500
+ *               withdrawalFeeRate:
+ *                 type: number
+ *                 description: 0 to 0.20
+ *                 example: 0.03
+ *               orderAutoCompleteHours:
+ *                 type: integer
+ *                 example: 72
+ *               sellerRespondHours:
+ *                 type: integer
+ *                 example: 48
+ *               withdrawalDelayDays:
+ *                 type: integer
+ *                 example: 7
  *     responses:
  *       200:
- *         description: Service featured status updated
+ *         description: Commission settings updated
+ *       403:
+ *         description: Super admin only
  */
+router.patch(
+  '/commissions',
+  superAdminOnly,
+  validate(updateCommissionSchema),
+  adminController.updateCommissionSettings
+);
+
+// ─── Services ─────────────────────────────────────────────────────────────────
+
+router.get('/services', adminController.getAllServices);
 router.patch(
   '/services/:id/feature',
   validate(featureServiceSchema),
   adminController.featureService
 );
-
-/**
- * @swagger
- * /admin/services/{id}:
- *   delete:
- *     summary: Deactivate a service listing
- *     tags: [Admin]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *     responses:
- *       200:
- *         description: Service deactivated
- */
 router.delete('/services/:id', validate(serviceIdParamSchema), adminController.deleteService);
 
 // ─── Orders ───────────────────────────────────────────────────────────────────
 
-/**
- * @swagger
- * /admin/orders:
- *   get:
- *     summary: Get all orders across all users
- *     tags: [Admin]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
- *       - in: query
- *         name: limit
- *         schema: { type: integer, default: 20 }
- *       - in: query
- *         name: status
- *         schema:
- *           type: string
- *           enum: [pending, processing, delivered, completed, disputed, cancelled, refunded]
- *     responses:
- *       200:
- *         description: All orders paginated
- */
 router.get('/orders', validate(getAdminOrdersSchema), adminController.getAllOrders);
 
 // ─── Analytics ────────────────────────────────────────────────────────────────
@@ -290,7 +325,7 @@ router.get('/orders', validate(getAdminOrdersSchema), adminController.getAllOrde
  * @swagger
  * /admin/analytics:
  *   get:
- *     summary: Get platform analytics with time-series data
+ *     summary: Platform analytics with time-series data
  *     tags: [Admin]
  *     security:
  *       - bearerAuth: []
@@ -303,49 +338,12 @@ router.get('/orders', validate(getAdminOrdersSchema), adminController.getAllOrde
  *           default: 30d
  *     responses:
  *       200:
- *         description: |
- *           Returns:
- *           - overview: totals (users, orders, revenue, disputes)
- *           - timeSeries.revenue: daily revenue array [{date, revenue, count}]
- *           - timeSeries.users: daily signups [{date, buyers, sellers, total}]
- *           - timeSeries.orders: daily orders [{date, statuses, total}]
- *           - topSellers: top 10 sellers by lifetime earnings
- *           - orderStatusBreakdown: count per status
+ *         description: Full analytics payload
  */
 router.get('/analytics', validate(analyticsSchema), adminController.getAnalytics);
 
 // ─── Announcements ────────────────────────────────────────────────────────────
 
-/**
- * @swagger
- * /admin/announcements:
- *   post:
- *     summary: Send a platform announcement email to users
- *     tags: [Admin]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [subject, message]
- *             properties:
- *               subject:
- *                 type: string
- *                 example: Important update from TrendFuel
- *               message:
- *                 type: string
- *                 example: We have updated our terms of service...
- *               targetRole:
- *                 type: string
- *                 enum: [all, buyer, seller]
- *                 default: all
- *     responses:
- *       200:
- *         description: Announcement sent, returns count of emails sent
- */
 router.post('/announcements', validate(announcementSchema), adminController.sendAnnouncement);
 
 export default router;
