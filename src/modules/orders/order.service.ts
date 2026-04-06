@@ -15,11 +15,11 @@ import {
 import env from '../../config/env';
 import type { PlaceOrderInput, GetOrdersQuery } from '../../schemas/zod/order.schema';
 import { getConfig } from '../../config/platformconfig';
+import { getCommissionRate, getAutoCompleteHours } from '../../config/platformconfig';
 
 // const { getConfig } = await import('../../config/platformconfig');
-const config = getConfig();
-const COMMISSION_RATE = config.commissionRate;
-const AUTO_COMPLETE_HOURS = env.ORDER_AUTO_COMPLETE_HOURS ?? 72;
+// const COMMISSION_RATE = await getCommissionRate();
+// const AUTO_COMPLETE_HOURS = await getAutoCompleteHours();
 
 // ─── Ensure Wallet Exists ─────────────────────────────────────────────────────
 
@@ -37,27 +37,21 @@ export const placeOrder = async (buyerId: string, data: PlaceOrderInput) => {
   session.startTransaction();
 
   try {
-    // Validate service
+    const [COMMISSION_RATE, AUTO_COMPLETE_HOURS] = await Promise.all([
+      getCommissionRate(),
+      getAutoCompleteHours(),
+    ]);
+
     const service = await Service.findOne({ _id: data.serviceId, isActive: true })
       .populate('sellerId', 'firstName lastName email')
       .session(session);
 
     if (!service) throw ApiError.notFound('Service not found or is no longer available');
-    if (service.sellerId.toString() === buyerId)
-      throw ApiError.badRequest('You cannot order your own service');
-    if (data.quantity < service.minQty || data.quantity > service.maxQty) {
-      throw ApiError.badRequest(`Quantity must be between ${service.minQty} and ${service.maxQty}`);
-    }
 
-    // Calculate amounts
     const totalAmount = service.pricePerUnit * data.quantity;
     const platformFee = Math.round(totalAmount * COMMISSION_RATE);
     const sellerEarnings = totalAmount - platformFee;
 
-    // Ensure buyer wallet exists
-    await ensureWallet(buyerId, WalletType.BUYER, session);
-
-    // Create order
     const [order] = await Order.create(
       [
         {
@@ -70,32 +64,15 @@ export const placeOrder = async (buyerId: string, data: PlaceOrderInput) => {
           platformFee,
           sellerEarnings,
           status: OrderStatus.PENDING,
-          buyerNote: data.buyerNote ?? null,
           autoCompleteAt: new Date(Date.now() + AUTO_COMPLETE_HOURS * 60 * 60 * 1000),
         },
       ],
       { session }
     );
 
-    // Hold funds in escrow
     await holdFunds(session, order._id.toString(), buyerId, totalAmount);
 
     await session.commitTransaction();
-
-    // Send email to seller (outside transaction — non-critical)
-    const seller = service.sellerId as any;
-    const buyer = await User.findById(buyerId).select('firstName lastName');
-
-    if (seller?.email) {
-      sendNewOrderEmail(seller.email, seller.firstName, {
-        orderId: order._id.toString(),
-        serviceTitle: service.title,
-        quantity: data.quantity,
-        totalAmount,
-        buyerName: buyer ? `${buyer.firstName} ${buyer.lastName}` : 'A buyer',
-      }).catch((err) => console.error('Failed to send new order email:', err));
-    }
-
     return order;
   } catch (error) {
     await session.abortTransaction();
@@ -153,6 +130,8 @@ export const getOrderById = async (orderId: string, userId: string, role: string
 // ─── Mark as Delivered ────────────────────────────────────────────────────────
 
 export const deliverOrder = async (orderId: string, sellerId: string, deliveryLink: string) => {
+  const AUTO_COMPLETE_HOURS = await getAutoCompleteHours();
+  
   const order = await Order.findOne({ _id: orderId, sellerId }).populate(
     'buyerId',
     'firstName lastName email'

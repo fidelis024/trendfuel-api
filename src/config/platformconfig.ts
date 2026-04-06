@@ -1,11 +1,13 @@
 import { PlatformConfig, IPlatformConfig } from '../schemas/mongoose/platformconfig.model';
 
-// ─── Get Config (singleton — always one document) ─────────────────────────────
+let cachedConfig: IPlatformConfig | null = null;
 
+// ─── Get Config (with caching) ─────────────────────────────
 export const getConfig = async (): Promise<IPlatformConfig> => {
+  if (cachedConfig) return cachedConfig;
+
   let config = await PlatformConfig.findOne();
 
-  // Seed default config on first run
   if (!config) {
     config = await PlatformConfig.create({
       commissionRate: 0.2,
@@ -17,11 +19,23 @@ export const getConfig = async (): Promise<IPlatformConfig> => {
     });
   }
 
+  cachedConfig = config;
   return config;
 };
 
-// ─── Update Config (super_admin only) ────────────────────────────────────────
+// ─── Helpers (THIS IS WHAT YOU USE EVERYWHERE) ─────────────────
 
+export const getCommissionRate = async (): Promise<number> => {
+  const config = await getConfig();
+  return config.commissionRate;
+};
+
+export const getAutoCompleteHours = async (): Promise<number> => {
+  const config = await getConfig();
+  return config.orderAutoCompleteHours;
+};
+
+// ─── Update Config ────────────────────────────────────────────
 export const updateConfig = async (
   updates: Partial<{
     commissionRate: number;
@@ -38,6 +52,9 @@ export const updateConfig = async (
   Object.assign(config, updates);
   config.updatedBy = updatedBy as any;
   await config.save();
+
+  // 🔥 clear cache so new values apply
+  cachedConfig = null;
 
   return config;
 };
