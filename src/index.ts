@@ -29,6 +29,8 @@ app.use(compression());
 app.use(xss());
 app.use(hpp());
 
+app.use('/api/v1/payments/webhook', express.raw({ type: 'application/json' }));
+
 // Body parser
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));

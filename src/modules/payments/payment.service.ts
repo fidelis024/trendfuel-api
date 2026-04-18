@@ -62,33 +62,51 @@ const ensureWallet = async (userId: string, type: WalletType, session?: mongoose
 };
 
 // ─── Top-up via Xixapay (Naira) ───────────────────────────────────────────────
-// Creates a dynamic virtual account for this specific top-up amount.
-// Buyer transfers money to returned account → Xixapay fires webhook → wallet credited.
 
 export const initiateNairaTopup = async (userId: string, data: TopupNairaInput) => {
   const user = await User.findById(userId);
   if (!user) throw ApiError.notFound('User not found');
 
-  const response = await xixapay.post('/v1/createVirtualAccount', {
-    email: user.email,
-    name: `${user.firstName} ${user.lastName}`,
-    phoneNumber: '00000000000', // placeholder — dynamic accounts don't require phone
-    bankCode: ['20867'], // Palmpay — fastest settlement
-    businessId: env.XIXAPAY_BUSINESS_ID,
-    accountType: 'dynamic',
-    amount: data.amount,
-  });
+  // Try all three bank codes — return whichever gives us an account
+  // bankCode must be array of strings per Xixapay docs
+  const bankCodes = ['29007'];
 
-  if (response.data?.status !== 'success') {
-    throw ApiError.internal('Failed to create payment account. Please try again.');
+  let response: any;
+  try {
+    response = await xixapay.post('/v1/createVirtualAccount', {
+      email: user.email,
+      name: `${user.firstName} ${user.lastName}`,
+      phoneNumber: '07067182018',
+      bankCode: bankCodes,
+      businessId: env.XIXAPAY_BUSINESS_ID,
+      accountType: 'dynamic',
+      amount: data.amount,
+    });
+  } catch (err: any) {
+    const msg = err.response?.data?.message ?? 'Failed to reach payment provider';
+    throw ApiError.internal(msg);
   }
+
+  if (!response.data) {
+    throw ApiError.internal(
+      response.data?.message ?? 'Failed to create payment account. Please try again.'
+    );
+  }
+
+  console.info('Xixapay virtual account response:', response);
 
   const bankAccounts = response.data.bankAccounts;
+
   if (!bankAccounts || bankAccounts.length === 0) {
-    throw ApiError.internal('No bank account returned from payment provider.');
+    // Log the full response so we can debug
+    console.error('Xixapay returned empty bankAccounts:', JSON.stringify(response.data, null, 2));
+    throw ApiError.internal(
+      'Payment provider could not assign a bank account at this time. Please try again in a moment.'
+    );
   }
 
-  const account = bankAccounts[0];
+  // Prefer Palmpay (20867), fallback to whatever is returned
+  const account = bankAccounts.find((a: any) => a.bankCode === '29007') ?? bankAccounts[0];
 
   return {
     amount: data.amount,
@@ -97,15 +115,13 @@ export const initiateNairaTopup = async (userId: string, data: TopupNairaInput) 
     accountNumber: account.accountNumber,
     accountName: account.accountName,
     expiresIn: '30 minutes',
-    instruction: `Transfer exactly ₦${data.amount.toLocaleString()} to the account above. Your wallet will be credited automatically.`,
+    instruction: `Transfer exactly ₦${data.amount.toLocaleString()} to the account above. Your TrendFuel wallet will be credited automatically once payment is confirmed.`,
   };
 };
 
 // ─── Xixapay Webhook Handler ──────────────────────────────────────────────────
-// Verifies HMAC-SHA256 signature from 'xixapay' header, then credits buyer wallet.
 
 export const handleXixapayWebhook = async (rawBody: string, signature: string): Promise<void> => {
-  // Verify signature
   const computed = crypto
     .createHmac('sha256', env.XIXAPAY_SECRET_KEY)
     .update(rawBody)
@@ -118,19 +134,13 @@ export const handleXixapayWebhook = async (rawBody: string, signature: string): 
   const payload = JSON.parse(rawBody);
 
   if (payload.notification_status !== 'payment_successful') {
-    // Not a successful payment — acknowledge but do nothing
     return;
   }
 
   const { amount_paid, customer } = payload;
-  if (!customer?.customer_id && !customer?.email) {
-    throw ApiError.badRequest('No customer identifier in webhook payload');
-  }
-
-  // Find user by email from webhook payload
-  const user = await User.findOne({ email: customer.email });
+  const user = await User.findOne({ email: customer?.email });
   if (!user) {
-    console.error(`Xixapay webhook: no user found for email ${customer.email}`);
+    console.error(`Xixapay webhook: no user found for email ${customer?.email}`);
     return;
   }
 
@@ -140,22 +150,19 @@ export const handleXixapayWebhook = async (rawBody: string, signature: string): 
   try {
     const wallet = await ensureWallet(user._id.toString(), WalletType.BUYER, session);
 
-    // Idempotency — check if this transaction_id was already processed
     const existing = await Transaction.findOne({
       reference: `xixapay-${payload.transaction_id}`,
     }).session(session);
 
     if (existing) {
       await session.abortTransaction();
-      return; // already processed, safe to ignore
+      return;
     }
 
-    // Credit wallet — convert NGN to platform cents (store as NGN kobo)
     const amountInKobo = Math.round(amount_paid * 100);
     wallet.balance += amountInKobo;
     await wallet.save({ session });
 
-    // Log transaction
     await Transaction.create(
       [
         {
@@ -185,7 +192,7 @@ export const handleXixapayWebhook = async (rawBody: string, signature: string): 
 };
 
 // ─── Top-up via NOWPayments (Crypto) ─────────────────────────────────────────
-// Creates a crypto payment invoice. Buyer pays in USDT → webhook credits wallet.
+// FIX: NOWPayments requires specific currency codes like 'usdttrc20' not 'usdt'
 
 export const initiateCryptoTopup = async (userId: string, data: TopupCryptoInput) => {
   const user = await User.findById(userId);
@@ -193,14 +200,34 @@ export const initiateCryptoTopup = async (userId: string, data: TopupCryptoInput
 
   const reference = `trendfuel-topup-${userId}-${uuidv4()}`;
 
-  const response = await nowpayments.post('/payment', {
-    price_amount: data.amount,
-    price_currency: 'usd',
-    pay_currency: data.currency,
-    order_id: reference,
-    order_description: `TrendFuel wallet top-up — $${data.amount}`,
-    ipn_callback_url: `${env.API_URL}/api/v1/payments/webhook/nowpayments`,
-  });
+  // Map generic currency names to NOWPayments-specific codes
+  const currencyMap: Record<string, string> = {
+    usdt: 'usdttrc20', // USDT on TRC20 (Tron) — lowest fees
+    usdterc20: 'usdterc20',
+    usdttrc20: 'usdttrc20',
+    btc: 'btc',
+    eth: 'eth',
+    bnb: 'bnbbsc',
+    sol: 'sol',
+  };
+
+  const payCurrency = currencyMap[data.currency.toLowerCase()] ?? 'usdttrc20';
+
+  let response: any;
+  try {
+    response = await nowpayments.post('/payment', {
+      price_amount: data.amount,
+      price_currency: 'usd',
+      pay_currency: payCurrency,
+      order_id: reference,
+      order_description: `TrendFuel wallet top-up — $${data.amount}`,
+      ipn_callback_url: `${env.API_URL}/api/v1/payments/webhook/nowpayments`,
+    });
+  } catch (err: any) {
+    const msg = err.response?.data?.message ?? 'Failed to create crypto payment';
+    console.error('NOWPayments error:', err.response?.data);
+    throw ApiError.internal(`Crypto payment failed: ${msg}`);
+  }
 
   if (!response.data?.payment_id) {
     throw ApiError.internal('Failed to create crypto payment. Please try again.');
@@ -224,7 +251,6 @@ export const handleNowPaymentsWebhook = async (
   rawBody: string,
   signature: string
 ): Promise<void> => {
-  // Verify HMAC-SHA512 signature
   const computed = crypto
     .createHmac('sha512', env.NOWPAYMENTS_IPN_SECRET)
     .update(rawBody)
@@ -236,12 +262,10 @@ export const handleNowPaymentsWebhook = async (
 
   const payload = JSON.parse(rawBody);
 
-  // Only process confirmed/finished payments
   if (!['confirmed', 'finished'].includes(payload.payment_status)) {
     return;
   }
 
-  // Extract userId from order_id: "trendfuel-topup-{userId}-{uuid}"
   const parts = payload.order_id?.split('-');
   if (!parts || parts.length < 3) return;
   const userId = parts[2];
@@ -252,7 +276,6 @@ export const handleNowPaymentsWebhook = async (
   try {
     const wallet = await ensureWallet(userId, WalletType.BUYER, session);
 
-    // Idempotency check
     const existing = await Transaction.findOne({
       reference: `nowpayments-${payload.payment_id}`,
     }).session(session);
@@ -262,7 +285,6 @@ export const handleNowPaymentsWebhook = async (
       return;
     }
 
-    // Store in USD cents
     const amountInCents = Math.round(payload.price_amount * 100);
     wallet.balance += amountInCents;
     await wallet.save({ session });
@@ -306,7 +328,6 @@ export const requestWithdrawal = async (userId: string, data: WithdrawInput) => 
     const wallet = await Wallet.findOne({ userId }).session(session);
     if (!wallet) throw ApiError.badRequest('Wallet not found');
 
-    // Convert amount to kobo for comparison
     const amountInKobo = data.amount * 100;
     const withdrawalFee = Math.round(amountInKobo * config.withdrawalFeeRate);
     const netAmount = amountInKobo - withdrawalFee;
@@ -317,9 +338,8 @@ export const requestWithdrawal = async (userId: string, data: WithdrawInput) => 
       );
     }
 
-    // Check withdrawal delay for new sellers
     const user = await User.findById(userId).session(session);
-    if (user && user.sellerMetrics) {
+    if (user?.sellerMetrics) {
       const daysSinceJoined =
         (Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60 * 24);
       if (daysSinceJoined < config.withdrawalDelayDays) {
@@ -330,13 +350,11 @@ export const requestWithdrawal = async (userId: string, data: WithdrawInput) => 
       }
     }
 
-    // Deduct from cleared balance
     wallet.clearedBalance -= amountInKobo;
     await wallet.save({ session });
 
     const reference = `withdrawal-${userId}-${uuidv4()}`;
 
-    // Log pending withdrawal transaction
     await Transaction.create(
       [
         {
@@ -363,17 +381,16 @@ export const requestWithdrawal = async (userId: string, data: WithdrawInput) => 
 
     await session.commitTransaction();
 
-    // Initiate actual payout via Xixapay
+    // Initiate payout via Xixapay
     try {
       const payoutResponse = await xixapay.post('/v1/transfer', {
         businessId: env.XIXAPAY_BUSINESS_ID,
-        amount: netAmount / 100, // convert kobo back to NGN
+        amount: netAmount / 100,
         bank: data.bankCode,
         accountNumber: data.accountNumber,
         narration: data.narration ?? 'TrendFuel withdrawal',
       });
 
-      // Update transaction with gateway response
       await Transaction.findOneAndUpdate(
         { reference },
         {
@@ -385,13 +402,11 @@ export const requestWithdrawal = async (userId: string, data: WithdrawInput) => 
         }
       );
 
-      if (payoutResponse.data?.status !== 'success') {
-        // Refund if payout failed
+      if (!payoutResponse.data?.status) {
         await Wallet.findOneAndUpdate({ userId }, { $inc: { clearedBalance: amountInKobo } });
         throw ApiError.internal('Payout failed. Your balance has been restored.');
       }
     } catch (payoutErr: any) {
-      // Refund on payout error
       await Wallet.findOneAndUpdate({ userId }, { $inc: { clearedBalance: amountInKobo } });
       await Transaction.findOneAndUpdate({ reference }, { status: TransactionStatus.FAILED });
       throw ApiError.internal(
@@ -419,36 +434,46 @@ export const requestWithdrawal = async (userId: string, data: WithdrawInput) => 
 // ─── Verify Bank Account ──────────────────────────────────────────────────────
 
 export const verifyBankAccount = async (data: VerifyBankInput) => {
-  const response = await xixapay.post('/verify/bank', {
-    bank: data.bankCode,
-    accountNumber: data.accountNumber,
-  });
+  try {
+    const response = await xixapay.post('/verify/bank', {
+      bank: data.bankCode,
+      accountNumber: data.accountNumber,
+    });
 
-  if (response.data?.status !== 'success') {
-    throw ApiError.badRequest('Could not verify bank account. Please check the details.');
+
+    if (!response.data) {
+      throw ApiError.badRequest('Could not verify bank account. Please check the details.');
+    }
+
+    return {
+      accountName: response.data.AccountName,
+      bankName: response.data.BankName,
+      accountNumber: data.accountNumber,
+      bankCode: data.bankCode,
+    };
+  } catch (err: any) {
+    const msg = err.response?.data?.message ?? 'Could not verify bank account';
+    throw ApiError.badRequest(msg);
   }
-
-  return {
-    accountName: response.data.AccountName,
-    bankName: response.data.BankName,
-    accountNumber: data.accountNumber,
-    bankCode: data.bankCode,
-  };
 };
 
 // ─── Get Supported Banks ──────────────────────────────────────────────────────
 
 export const getSupportedBanks = async () => {
-  const response = await xixapay.get('/get/banks');
-  if (!response.data?.data) throw ApiError.internal('Failed to fetch banks list');
-  return response.data.data;
+  try {
+    const response = await xixapay.get('/get/banks');
+    if (!response.data) throw ApiError.internal('Failed to fetch banks list');
+    return response.data;
+  } catch (err: any) {
+    const msg = err.response?.data?.message ?? 'Failed to fetch banks';
+    throw ApiError.internal(msg);
+  }
 };
 
 // ─── Get Wallet ───────────────────────────────────────────────────────────────
 
 export const getWallet = async (userId: string) => {
-  const wallet = await ensureWallet(userId, WalletType.BUYER);
-  return wallet;
+  return ensureWallet(userId, WalletType.BUYER);
 };
 
 // ─── Get Transaction History ──────────────────────────────────────────────────
