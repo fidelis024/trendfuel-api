@@ -93,7 +93,6 @@ export const initiateNairaTopup = async (userId: string, data: TopupNairaInput) 
     );
   }
 
-  console.info('Xixapay virtual account response:', response);
 
   const bankAccounts = response.data.bankAccounts;
 
