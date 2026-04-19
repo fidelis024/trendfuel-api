@@ -9,6 +9,7 @@ import type {
   GetServicesQuery,
   CreateCategoryInput,
 } from '../../schemas/zod/service.schema';
+import { getCommissionRate } from '../../config/platformconfig';
 
 // ─── Categories ───────────────────────────────────────────────────────────────
 
@@ -172,4 +173,43 @@ export const deleteCategory = async (categoryId: string) => {
   // Soft delete — deactivate so existing services still resolve
   category.isActive = false;
   await category.save();
+};
+
+export const getPricePreview = async (serviceId: string, quantity: number) => {
+  const service = await Service.findOne({ _id: serviceId, isActive: true })
+    .populate('sellerId', 'firstName lastName sellerProfile')
+    .populate('categoryId', 'name');
+
+  if (!service) throw ApiError.notFound('Service not found or is no longer available');
+
+  if (quantity < service.minQty || quantity > service.maxQty) {
+    throw ApiError.badRequest(`Quantity must be between ${service.minQty} and ${service.maxQty}`);
+  }
+
+  const [COMMISSION_RATE] = await Promise.all([getCommissionRate()]);
+
+  const totalAmount = service.pricePerUnit * quantity;
+  const platformFee = Math.round(totalAmount * COMMISSION_RATE);
+  const sellerEarnings = totalAmount - platformFee;
+
+  return {
+    serviceId: service._id,
+    serviceTitle: service.title,
+    seller: {
+      _id: (service.sellerId as any)._id,
+      firstName: (service.sellerId as any).firstName,
+      lastName: (service.sellerId as any).lastName,
+      level: (service.sellerId as any).sellerProfile?.level,
+    },
+    category: (service.categoryId as any).name,
+    quantity,
+    unitPrice: service.pricePerUnit,
+    totalAmount,
+    platformFee,
+    sellerEarnings,
+    deliveryHours: service.deliveryHours,
+    requiresCredentials: service.requiresCredentials,
+    refillPolicy: service.refillPolicy,
+    note: 'All amounts in kobo (divide by 100 for NGN)',
+  };
 };

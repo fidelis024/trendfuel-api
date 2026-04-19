@@ -10,6 +10,12 @@ export enum OrderStatus {
   REFUNDED = 'refunded',
 }
 
+// ← ADD this interface
+export interface ICredentialField {
+  label: string;
+  value: string;
+}
+
 export interface IOrder extends Document {
   buyerId: mongoose.Types.ObjectId;
   sellerId: mongoose.Types.ObjectId;
@@ -25,9 +31,20 @@ export interface IOrder extends Document {
   autoCompleteAt: Date | null;
   completedAt: Date | null;
   buyerNote: string | null;
+  credentials: ICredentialField[]; // ← ADD
+  credentialsUpdatedAt: Date | null; // ← ADD
   createdAt: Date;
   updatedAt: Date;
 }
+
+// ← ADD this sub-schema before OrderSchema
+const CredentialFieldSchema = new Schema<ICredentialField>(
+  {
+    label: { type: String, required: true, trim: true, maxlength: 100 },
+    value: { type: String, required: true, maxlength: 1000 },
+  },
+  { _id: false }
+);
 
 const OrderSchema = new Schema<IOrder>(
   {
@@ -50,6 +67,8 @@ const OrderSchema = new Schema<IOrder>(
     autoCompleteAt: { type: Date, default: null, index: true },
     completedAt: { type: Date, default: null },
     buyerNote: { type: String, default: null, maxlength: 500 },
+    credentials: { type: [CredentialFieldSchema], default: [] }, // ← ADD
+    credentialsUpdatedAt: { type: Date, default: null }, // ← ADD
   },
   { timestamps: true }
 );

@@ -25,6 +25,7 @@ export interface IService extends Document {
   tags: string[];
   isActive: boolean;
   isFeatured: boolean;
+  requiresCredentials: boolean;
   rankScore: number;
   stats: IServiceStats;
   createdAt: Date;
@@ -76,6 +77,7 @@ const ServiceSchema = new Schema<IService>(
     tags: { type: [String], default: [] },
     isActive: { type: Boolean, default: true, index: true },
     isFeatured: { type: Boolean, default: false, index: true },
+    requiresCredentials: { type: Boolean, default: false, index: true },
     rankScore: { type: Number, default: 0, index: true },
     stats: {
       type: ServiceStatsSchema,

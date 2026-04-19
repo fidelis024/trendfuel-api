@@ -129,39 +129,39 @@ export const getOrderById = async (orderId: string, userId: string, role: string
 
 // ─── Mark as Delivered ────────────────────────────────────────────────────────
 
-export const deliverOrder = async (orderId: string, sellerId: string, deliveryLink: string) => {
-  const AUTO_COMPLETE_HOURS = await getAutoCompleteHours();
-  
-  const order = await Order.findOne({ _id: orderId, sellerId }).populate(
-    'buyerId',
-    'firstName lastName email'
-  );
+// export const deliverOrder = async (orderId: string, sellerId: string, deliveryLink: string) => {
+//   const AUTO_COMPLETE_HOURS = await getAutoCompleteHours();
 
-  if (!order) throw ApiError.notFound('Order not found or you do not own this order');
-  if (order.status !== OrderStatus.PENDING && order.status !== OrderStatus.PROCESSING) {
-    throw ApiError.badRequest(`Cannot deliver an order with status: ${order.status}`);
-  }
+//   const order = await Order.findOne({ _id: orderId, sellerId }).populate(
+//     'buyerId',
+//     'firstName lastName email'
+//   );
 
-  order.status = OrderStatus.DELIVERED;
-  order.deliveryLink = deliveryLink;
-  order.deliveredAt = new Date();
-  // Reset the auto-complete timer from delivery time
-  order.autoCompleteAt = new Date(Date.now() + AUTO_COMPLETE_HOURS * 60 * 60 * 1000);
-  await order.save();
+//   if (!order) throw ApiError.notFound('Order not found or you do not own this order');
+//   if (order.status !== OrderStatus.PENDING && order.status !== OrderStatus.PROCESSING) {
+//     throw ApiError.badRequest(`Cannot deliver an order with status: ${order.status}`);
+//   }
 
-  // Email buyer
-  const buyer = order.buyerId as any;
-  const service = await Service.findById(order.serviceId).select('title');
-  if (buyer?.email && service) {
-    sendOrderDeliveredEmail(buyer.email, buyer.firstName, {
-      orderId: order._id.toString(),
-      serviceTitle: service.title,
-      deliveryLink,
-    }).catch((err) => console.error('Failed to send delivery email:', err));
-  }
+//   order.status = OrderStatus.DELIVERED;
+//   order.deliveryLink = deliveryLink;
+//   order.deliveredAt = new Date();
+//   // Reset the auto-complete timer from delivery time
+//   order.autoCompleteAt = new Date(Date.now() + AUTO_COMPLETE_HOURS * 60 * 60 * 1000);
+//   await order.save();
 
-  return order;
-};
+//   // Email buyer
+//   const buyer = order.buyerId as any;
+//   const service = await Service.findById(order.serviceId).select('title');
+//   if (buyer?.email && service) {
+//     sendOrderDeliveredEmail(buyer.email, buyer.firstName, {
+//       orderId: order._id.toString(),
+//       serviceTitle: service.title,
+//       deliveryLink,
+//     }).catch((err) => console.error('Failed to send delivery email:', err));
+//   }
+
+//   return order;
+// };
 
 // ─── Complete Order ───────────────────────────────────────────────────────────
 
@@ -264,6 +264,96 @@ export const cancelOrder = async (orderId: string, userId: string, role: string)
   } finally {
     session.endSession();
   }
+};
+
+// ─── Mark as Delivered ────────────────────────────────────────────────────────
+
+export const deliverOrder = async (
+  orderId: string,
+  sellerId: string,
+  data: { deliveryLink?: string; credentials?: { label: string; value: string }[] }
+) => {
+  const AUTO_COMPLETE_HOURS = await getAutoCompleteHours();
+
+  const order = await Order.findOne({ _id: orderId, sellerId })
+    .populate<{
+      serviceId: { title: string; requiresCredentials: boolean };
+    }>('serviceId', 'title requiresCredentials')
+    .populate('buyerId', 'firstName lastName email');
+
+  if (!order) throw ApiError.notFound('Order not found or you do not own this order');
+
+  if (order.status !== OrderStatus.PENDING && order.status !== OrderStatus.PROCESSING) {
+    throw ApiError.badRequest(`Cannot deliver an order with status: ${order.status}`);
+  }
+
+  const service = order.serviceId as any;
+
+  // Enforce credentials if service requires them
+  if (service?.requiresCredentials) {
+    if (!data.credentials || data.credentials.length === 0) {
+      throw ApiError.badRequest('This service requires credentials to be attached on delivery');
+    }
+  }
+
+  order.status = OrderStatus.DELIVERED;
+  order.deliveryLink = data.deliveryLink ?? null;
+  order.deliveredAt = new Date();
+  order.autoCompleteAt = new Date(Date.now() + AUTO_COMPLETE_HOURS * 60 * 60 * 1000);
+
+  if (data.credentials && data.credentials.length > 0) {
+    order.credentials = data.credentials;
+    order.credentialsUpdatedAt = new Date();
+  }
+
+  await order.save();
+
+  // Email buyer
+  const buyer = order.buyerId as any;
+  if (buyer?.email && service) {
+    sendOrderDeliveredEmail(buyer.email, buyer.firstName, {
+      orderId: order._id.toString(),
+      serviceTitle: service.title,
+      deliveryLink: data.deliveryLink ?? '',
+    }).catch((err) => console.error('Failed to send delivery email:', err));
+  }
+
+  return order;
+};
+
+// ─── Get Order Credentials ────────────────────────────────────────────────────
+
+export const getOrderCredentials = async (orderId: string, userId: string, role: string) => {
+  const order = await Order.findById(orderId).select(
+    'buyerId sellerId status credentials credentialsUpdatedAt serviceId'
+  );
+
+  if (!order) throw ApiError.notFound('Order not found');
+
+  const isBuyer = order.buyerId.toString() === userId;
+  const isSeller = order.sellerId.toString() === userId;
+  const isAdmin = role === 'admin' || role === 'super_admin';
+
+  if (!isBuyer && !isSeller && !isAdmin) {
+    throw ApiError.forbidden('You do not have access to this order');
+  }
+
+  // Buyers locked out until order is completed
+  if (isBuyer && order.status !== OrderStatus.COMPLETED) {
+    throw ApiError.forbidden(
+      'Credentials are only accessible once the order is marked as completed'
+    );
+  }
+
+  if (!order.credentials || order.credentials.length === 0) {
+    throw ApiError.notFound('No credentials have been attached to this order');
+  }
+
+  return {
+    orderId: order._id,
+    credentials: order.credentials,
+    credentialsUpdatedAt: order.credentialsUpdatedAt,
+  };
 };
 
 // ─── Auto-Complete Expired Orders (called by cron) ────────────────────────────

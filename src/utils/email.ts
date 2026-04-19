@@ -76,7 +76,7 @@ export const sendVerificationEmail = async (email: string, token: string, firstN
 };
 
 export const sendPasswordResetEmail = async (email: string, token: string, firstName: string) => {
-  const resetUrl = `${env.APP_URL}/reset-password/${token}`;
+  const resetUrl = `${env.APP_URL}/reset-password?token=${token}`;
   await sendEmail(
     email,
     'Reset your TrendFuel password',

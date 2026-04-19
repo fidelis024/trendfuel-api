@@ -208,3 +208,62 @@ export const deleteReview = async (reviewId: string, buyerId: string) => {
     console.error('Failed to recalculate seller metrics after review deletion:', err)
   );
 };
+
+// ─── Get Buyer's Reviewable Orders ───────────────────────────────────────────
+
+export const getReviewableOrders = async (buyerId: string) => {
+  const buyerObjectId = new mongoose.Types.ObjectId(buyerId);
+
+  // Find completed orders that have no review yet
+  const orders = await Order.aggregate([
+    {
+      $match: {
+        buyerId: buyerObjectId,
+        status: OrderStatus.COMPLETED,
+      },
+    },
+    {
+      $lookup: {
+        from: 'reviews',
+        localField: '_id',
+        foreignField: 'orderId',
+        as: 'review',
+      },
+    },
+    // Only keep orders with no review
+    { $match: { review: { $size: 0 } } },
+    { $sort: { completedAt: -1 } },
+    {
+      $lookup: {
+        from: 'services',
+        localField: 'serviceId',
+        foreignField: '_id',
+        as: 'service',
+      },
+    },
+    { $unwind: '$service' },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'sellerId',
+        foreignField: '_id',
+        as: 'seller',
+      },
+    },
+    { $unwind: '$seller' },
+    {
+      $project: {
+        _id: 1,
+        totalAmount: 1,
+        completedAt: 1,
+        'service._id': 1,
+        'service.title': 1,
+        'seller._id': 1,
+        'seller.firstName': 1,
+        'seller.lastName': 1,
+      },
+    },
+  ]);
+
+  return orders;
+};

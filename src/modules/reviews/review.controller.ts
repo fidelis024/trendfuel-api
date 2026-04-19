@@ -45,7 +45,10 @@ export const getServiceReviews = asyncHandler(async (req: Request, res: Response
 export const getMyReview = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw ApiError.unauthorized('Authentication required');
 
-  const review = await reviewService.getMyReview(req.params.orderId as string, req.user._id.toString());
+  const review = await reviewService.getMyReview(
+    req.params.orderId as string,
+    req.user._id.toString()
+  );
 
   res.status(200).json(new ApiResponse(200, 'Review fetched successfully', review));
 });
@@ -57,4 +60,11 @@ export const deleteReview = asyncHandler(async (req: Request, res: Response) => 
   await reviewService.deleteReview(req.params.id as string, req.user._id.toString());
 
   res.status(200).json(new ApiResponse(200, 'Review deleted successfully'));
+});
+
+// GET /api/v1/reviews/reviewable-orders — buyer only
+export const getReviewableOrders = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) throw ApiError.unauthorized('Authentication required');
+  const orders = await reviewService.getReviewableOrders(req.user._id.toString());
+  res.status(200).json(new ApiResponse(200, 'Reviewable orders fetched successfully', orders));
 });

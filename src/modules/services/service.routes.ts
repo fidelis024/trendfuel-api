@@ -42,6 +42,103 @@ router.get('/categories', serviceController.getCategories);
 
 /**
  * @swagger
+ * /services/{id}/price-preview:
+ *   get:
+ *     summary: Preview the total price before placing an order
+ *     tags: [Services]
+ *     description: |
+ *       Calculates the exact cost breakdown for a given quantity before the buyer
+ *       commits to purchasing. No money moves, no order is created.
+ *
+ *       Use this to power the real-time price calculator on the service detail page.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Service ID
+ *       - in: query
+ *         name: quantity
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: Number of units the buyer wants to purchase
+ *         example: 500
+ *     responses:
+ *       200:
+ *         description: Price breakdown
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 serviceId:
+ *                   type: string
+ *                 serviceTitle:
+ *                   type: string
+ *                   example: 1000 Instagram Followers
+ *                 seller:
+ *                   type: object
+ *                   properties:
+ *                     _id:
+ *                       type: string
+ *                     firstName:
+ *                       type: string
+ *                     lastName:
+ *                       type: string
+ *                     level:
+ *                       type: string
+ *                       enum: [new, rising, top, pro]
+ *                 category:
+ *                   type: string
+ *                   example: Instagram
+ *                 quantity:
+ *                   type: integer
+ *                   example: 500
+ *                 unitPrice:
+ *                   type: integer
+ *                   description: Price per unit in kobo
+ *                   example: 50000
+ *                 totalAmount:
+ *                   type: integer
+ *                   description: Total in kobo (unitPrice × quantity)
+ *                   example: 25000000
+ *                 platformFee:
+ *                   type: integer
+ *                   description: Platform commission in kobo
+ *                   example: 5000000
+ *                 sellerEarnings:
+ *                   type: integer
+ *                   description: What seller receives in kobo
+ *                   example: 20000000
+ *                 deliveryHours:
+ *                   type: integer
+ *                   example: 24
+ *                 requiresCredentials:
+ *                   type: boolean
+ *                   example: false
+ *                 refillPolicy:
+ *                   type: object
+ *                   properties:
+ *                     offered:
+ *                       type: boolean
+ *                     windowDays:
+ *                       type: integer
+ *                     conditions:
+ *                       type: string
+ *                 note:
+ *                   type: string
+ *                   example: All amounts in kobo (divide by 100 for NGN)
+ *       400:
+ *         description: Quantity out of range or missing
+ *       404:
+ *         description: Service not found or inactive
+ */
+router.get('/:id/price-preview', serviceController.getPricePreview);
+
+/**
+ * @swagger
  * /services/categories:
  *   post:
  *     summary: Create a new category (admin only)
@@ -68,7 +165,7 @@ router.get('/categories', serviceController.getCategories);
 router.post(
   '/categories',
   authenticate,
-  authorize('admin'),
+  authorize('admin', 'super_admin'),
   validate(createCategorySchema),
   serviceController.createCategory
 );
@@ -108,7 +205,7 @@ router.post(
 router.patch(
   '/categories/:id',
   authenticate,
-  authorize('admin'),
+  authorize('admin', 'super_admin'),
   validate(updateCategorySchema),
   serviceController.updateCategory
 );
@@ -135,7 +232,7 @@ router.patch(
 router.delete(
   '/categories/:id',
   authenticate,
-  authorize('admin'),
+  authorize('admin', 'super_admin'),
   validate(categoryIdSchema),
   serviceController.deleteCategory
 );
@@ -208,7 +305,7 @@ router.get('/', validate(getServicesSchema), serviceController.getServices);
  *       200:
  *         description: Seller's own service listings
  */
-router.get('/my', authenticate, authorize('seller', 'admin'), serviceController.getMyServices);
+router.get('/my', authenticate, authorize('seller', 'admin', 'super_admin'), serviceController.getMyServices);
 
 /**
  * @swagger
@@ -262,7 +359,7 @@ router.get('/:id', validate(serviceIdSchema), serviceController.getServiceById);
 router.post(
   '/',
   authenticate,
-  authorize('seller', 'admin'),
+  authorize('seller', 'admin', 'super_admin'),
   validate(createServiceSchema),
   serviceController.createService
 );
@@ -303,7 +400,7 @@ router.post(
 router.patch(
   '/:id',
   authenticate,
-  authorize('seller', 'admin'),
+  authorize('seller', 'admin', 'super_admin'),
   validate(updateServiceSchema),
   serviceController.updateService
 );
@@ -330,7 +427,7 @@ router.patch(
 router.delete(
   '/:id',
   authenticate,
-  authorize('seller', 'admin'),
+  authorize('seller', 'admin', 'super_admin'),
   validate(serviceIdSchema),
   serviceController.deleteService
 );

@@ -48,12 +48,7 @@ const router = Router();
  *       400:
  *         description: Fee already paid or user is already a seller
  */
-router.post(
-  '/pay',
-  authenticate,
-  authorize('buyer'),
-  sellerRegistrationController.paySellerFee
-);
+router.post('/pay', authenticate, authorize('buyer'), sellerRegistrationController.paySellerFee);
 
 /**
  * @swagger

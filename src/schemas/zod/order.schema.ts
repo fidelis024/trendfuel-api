@@ -10,12 +10,33 @@ export const placeOrderSchema = z.object({
   }),
 });
 
+// Replace your existing deliverOrderSchema
 export const deliverOrderSchema = z.object({
   params: z.object({
-    id: z.string().min(1, 'Order ID is required'),
+    id: z.string().min(1),
   }),
-  body: z.object({
-    deliveryLink: z.string().min(1, 'Delivery proof is required').max(500),
+  body: z
+    .object({
+      deliveryLink: z.string().url('Must be a valid URL').optional(),
+      credentials: z
+        .array(
+          z.object({
+            label: z.string().min(1, 'Label is required').max(100).trim(),
+            value: z.string().min(1, 'Value is required').max(1000),
+          })
+        )
+        .max(20, 'Maximum 20 credential fields allowed')
+        .optional(),
+    })
+    .refine((data) => data.deliveryLink || (data.credentials && data.credentials.length > 0), {
+      message: 'Provide at least a deliveryLink or credentials',
+    }),
+});
+
+// Add new schema for credentials endpoint
+export const orderCredentialsSchema = z.object({
+  params: z.object({
+    id: z.string().min(1),
   }),
 });
 
@@ -44,5 +65,5 @@ export const getOrdersSchema = z.object({
 });
 
 export type PlaceOrderInput = z.infer<typeof placeOrderSchema>['body'];
-export type DeliverOrderInput = z.infer<typeof deliverOrderSchema>['body'];
 export type GetOrdersQuery = z.infer<typeof getOrdersSchema>['query'];
+export type DeliverOrderInput = z.infer<typeof deliverOrderSchema>['body'];

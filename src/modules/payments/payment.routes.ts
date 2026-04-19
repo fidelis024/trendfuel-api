@@ -167,7 +167,7 @@ router.get(
 router.post(
   '/topup/naira',
   authenticate,
-  authorize('buyer', 'admin', 'super_admin'),
+  authorize('buyer', 'seller', 'admin', 'super_admin'),
   validate(topupNairaSchema),
   paymentController.initiateNairaTopup
 );
@@ -208,7 +208,7 @@ router.post(
 router.post(
   '/topup/crypto',
   authenticate,
-  authorize('buyer', 'admin', 'super_admin'),
+  authorize('buyer', 'seller', 'admin', 'super_admin'),
   validate(topupCryptoSchema),
   paymentController.initiateCryptoTopup
 );

@@ -90,3 +90,15 @@ export const deleteCategory = asyncHandler(async (req: Request, res: Response) =
   await serviceService.deleteCategory(req.params.id as string);
   res.status(200).json(new ApiResponse(200, 'Category deactivated successfully'));
 });
+
+// GET /api/v1/services/:id/price-preview?quantity=500
+export const getPricePreview = asyncHandler(async (req: Request, res: Response) => {
+  const quantity = parseInt(req.query.quantity as string);
+
+  if (!quantity || isNaN(quantity) || quantity < 1) {
+    throw ApiError.badRequest('quantity is required and must be a positive integer');
+  }
+
+  const data = await serviceService.getPricePreview(req.params.id as string, quantity);
+  res.status(200).json(new ApiResponse(200, 'Price preview calculated', data));
+});

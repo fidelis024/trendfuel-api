@@ -55,7 +55,12 @@ router.use(authenticate);
  *       409:
  *         description: Dispute already exists for this order
  */
-router.post('/', authorize('buyer'), validate(openDisputeSchema), disputeController.openDispute);
+router.post(
+  '/',
+  authorize('buyer', 'seller', 'admin', 'super_admin'),
+  validate(openDisputeSchema),
+  disputeController.openDispute
+);
 
 /**
  * @swagger
@@ -138,7 +143,7 @@ router.get('/:id', validate(disputeIdSchema), disputeController.getDisputeById);
  */
 router.patch(
   '/:id/respond',
-  authorize('seller'),
+  authorize('seller', 'admin', 'super_admin'),
   validate(sellerRespondSchema),
   disputeController.sellerRespond
 );
@@ -175,7 +180,7 @@ router.patch(
  */
 router.post(
   '/:id/evidence',
-  authorize('buyer', 'seller'),
+  authorize('buyer', 'seller', 'admin', 'super_admin'),
   upload.single('file'),
   disputeController.uploadEvidence
 );
@@ -220,7 +225,7 @@ router.post(
  */
 router.patch(
   '/:id/resolve',
-  authorize('admin'),
+  authorize('admin', 'super_admin'),
   validate(resolveDisputeSchema),
   disputeController.resolveDispute
 );

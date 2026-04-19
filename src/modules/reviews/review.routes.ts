@@ -58,10 +58,61 @@ const router = Router();
 router.post(
   '/',
   authenticate,
-  authorize('buyer'),
+  authorize('buyer', 'seller', 'admin', 'super_admin'),
   validate(createReviewSchema),
   reviewController.createReview
 );
+
+/**
+ * @swagger
+ * /reviews/reviewable-orders:
+ *   get:
+ *     summary: Get buyer's completed orders that are eligible for review
+ *     tags: [Reviews]
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Returns all completed orders the buyer has not yet reviewed.
+ *       Use this to populate the "Leave a Review" order picker on the frontend.
+ *       Each order includes the service title and seller name.
+ *     responses:
+ *       200:
+ *         description: List of reviewable orders
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   _id:
+ *                     type: string
+ *                     description: Order ID — pass this as orderId when creating a review
+ *                   totalAmount:
+ *                     type: integer
+ *                     description: Amount paid in kobo
+ *                   completedAt:
+ *                     type: string
+ *                     format: date-time
+ *                   service:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       title:
+ *                         type: string
+ *                         example: 1000 Instagram Followers
+ *                   seller:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       firstName:
+ *                         type: string
+ *                       lastName:
+ *                         type: string
+ */
+router.get('/reviewable-orders', authenticate, reviewController.getReviewableOrders);
 
 /**
  * @swagger
@@ -185,7 +236,7 @@ router.get('/order/:orderId', authenticate, reviewController.getMyReview);
 router.delete(
   '/:id',
   authenticate,
-  authorize('buyer'),
+  authorize('buyer', 'seller', 'admin', 'super_admin'),
   validate(reviewIdSchema),
   reviewController.deleteReview
 );

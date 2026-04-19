@@ -131,6 +131,102 @@ router.patch('/me/change-password', validate(changePasswordSchema), userControll
 
 /**
  * @swagger
+ * /users/seller/{sellerId}:
+ *   get:
+ *     summary: Get a seller's public profile
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Returns a seller's public profile visible to anyone.
+ *
+ *       **KYC details** (fullName, NIN, DOB, phone, address) are only included if:
+ *       - The requester is the seller themselves
+ *       - The requester is an admin or super_admin
+ *
+ *       Everyone else gets the public profile only (bio, niche, metrics, level).
+ *     parameters:
+ *       - in: path
+ *         name: sellerId
+ *         required: true
+ *         schema: { type: string }
+ *         description: The seller's user ID
+ *     responses:
+ *       200:
+ *         description: Seller profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 _id:
+ *                   type: string
+ *                 firstName:
+ *                   type: string
+ *                 lastName:
+ *                   type: string
+ *                 sellerProfile:
+ *                   type: object
+ *                   properties:
+ *                     bio:
+ *                       type: string
+ *                     country:
+ *                       type: string
+ *                     niche:
+ *                       type: string
+ *                     level:
+ *                       type: string
+ *                       enum: [new, rising, top, pro]
+ *                     badge:
+ *                       type: string
+ *                       nullable: true
+ *                 sellerMetrics:
+ *                   type: object
+ *                   properties:
+ *                     avgRating:
+ *                       type: number
+ *                     completionRate:
+ *                       type: number
+ *                     totalOrders:
+ *                       type: integer
+ *                     disputeRate:
+ *                       type: number
+ *                 memberSince:
+ *                   type: string
+ *                   format: date-time
+ *                 kyc:
+ *                   description: Only present for the seller themselves or admins
+ *                   type: object
+ *                   nullable: true
+ *                   properties:
+ *                     fullName:
+ *                       type: string
+ *                     nin:
+ *                       type: string
+ *                     dateOfBirth:
+ *                       type: string
+ *                       format: date
+ *                     phone:
+ *                       type: string
+ *                     streetAddress:
+ *                       type: string
+ *                     city:
+ *                       type: string
+ *                     state:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                       enum: [pending, approved, rejected]
+ *                     rejectionReason:
+ *                       type: string
+ *                       nullable: true
+ *       404:
+ *         description: Seller not found
+ */
+router.get('/seller/:sellerId', authenticate, userController.getSellerProfile);
+
+/**
+ * @swagger
  * /users/me:
  *   delete:
  *     summary: Deactivate current user account

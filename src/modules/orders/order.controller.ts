@@ -39,19 +39,6 @@ export const getOrderById = asyncHandler(async (req: Request, res: Response) => 
   res.status(200).json(new ApiResponse(200, 'Order fetched successfully', order));
 });
 
-// PATCH /api/v1/orders/:id/deliver
-export const deliverOrder = asyncHandler(async (req: Request, res: Response) => {
-  if (!req.user) throw ApiError.unauthorized('Authentication required');
-
-  const order = await orderService.deliverOrder(
-    req.params.id as string,
-    req.user._id.toString(),
-    req.body.deliveryLink
-  );
-
-  res.status(200).json(new ApiResponse(200, 'Order marked as delivered', order));
-});
-
 // PATCH /api/v1/orders/:id/complete
 export const completeOrder = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw ApiError.unauthorized('Authentication required');
@@ -59,6 +46,31 @@ export const completeOrder = asyncHandler(async (req: Request, res: Response) =>
   const order = await orderService.completeOrder(req.params.id as string, req.user._id.toString());
 
   res.status(200).json(new ApiResponse(200, 'Order completed. Payment released to seller.', order));
+});
+
+// PATCH /api/v1/orders/:id/deliver — replace existing
+export const deliverOrder = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) throw ApiError.unauthorized('Authentication required');
+
+  const order = await orderService.deliverOrder(req.params.id as string, req.user._id.toString(), {
+    deliveryLink: req.body.deliveryLink,
+    credentials: req.body.credentials,
+  });
+
+  res.status(200).json(new ApiResponse(200, 'Order marked as delivered', order));
+});
+
+// GET /api/v1/orders/:id/credentials — add this
+export const getOrderCredentials = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) throw ApiError.unauthorized('Authentication required');
+
+  const result = await orderService.getOrderCredentials(
+    req.params.id as string,
+    req.user._id.toString(),
+    req.user.role
+  );
+
+  res.status(200).json(new ApiResponse(200, 'Credentials fetched successfully', result));
 });
 
 // PATCH /api/v1/orders/:id/cancel
