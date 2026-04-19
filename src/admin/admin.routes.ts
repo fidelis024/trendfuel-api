@@ -240,6 +240,62 @@ router.patch(
   adminController.handleSellerApplication
 );
 
+/**
+ * @swagger
+ * /admin/seller-applications/{id}/kyc:
+ *   get:
+ *     summary: View KYC details for a seller application
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Returns the full KYC submission for a user's seller application.
+ *       Use this to review identity details before approving or rejecting.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: User ID (not KYC ID)
+ *     responses:
+ *       200:
+ *         description: KYC details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 userId:
+ *                   type: string
+ *                 fullName:
+ *                   type: string
+ *                 nin:
+ *                   type: string
+ *                 dateOfBirth:
+ *                   type: string
+ *                   format: date
+ *                 phone:
+ *                   type: string
+ *                 streetAddress:
+ *                   type: string
+ *                 city:
+ *                   type: string
+ *                 state:
+ *                   type: string
+ *                 status:
+ *                   type: string
+ *                   enum: [pending, approved, rejected]
+ *                 rejectionReason:
+ *                   type: string
+ *                   nullable: true
+ *                 reviewedAt:
+ *                   type: string
+ *                   format: date-time
+ *       404:
+ *         description: No KYC found for this user
+ */
+router.get('/seller-applications/:id/kyc', adminController.getSellerKYC);
+
 // ─── Commission Settings ──────────────────────────────────────────────────────
 
 /**

@@ -7,6 +7,7 @@ import reviewRoutes from './reviews/review.routes';
 import disputeRoutes from './disputes/dispute.routes';
 import adminRoutes from '../admin/admin.routes';
 import paymentRoutes from './payments/payment.routes';
+import sellerRegistrationRoutes from './sellerRegistration/seller-registration.routes';
 
 const router = Router();
 
@@ -18,6 +19,7 @@ router.use('/reviews', reviewRoutes);
 router.use('/disputes', disputeRoutes);
 router.use('/admin', adminRoutes);
 router.use('/payments', paymentRoutes);
+router.use('/seller-registration', sellerRegistrationRoutes);
 
 // Future modules:
 // router.use('/payments', paymentRoutes);

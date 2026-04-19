@@ -18,6 +18,7 @@ import type {
   AnalyticsQuery,
   AnnouncementInput,
 } from '../schemas/zod/admin.schema';
+import { SellerKYC } from '../schemas/mongoose/sellerKyc.model';
 
 const resend = new Resend(env.RESEND_API_KEY);
 const FROM = 'TrendFuel <noreply@trendfuelhq.org>';
@@ -87,8 +88,10 @@ export const updateUserStatus = async (targetUserId: string, data: UpdateUserSta
 export const getSellerApplications = async (page: number, limit: number) => {
   const { skip } = getPaginationOptions(page, limit);
 
+  // User is still a BUYER when they apply — filter by accessFeePaid + pending status
   const filter = {
-    role: UserRole.SELLER,
+    role: UserRole.BUYER,
+    'sellerProfile.accessFeePaid': true,
     'sellerProfile.applicationStatus': 'pending',
   };
 
@@ -100,42 +103,74 @@ export const getSellerApplications = async (page: number, limit: number) => {
   return { applicants, pagination: buildPaginationMeta(total, page, limit) };
 };
 
-export const handleSellerApplication = async (sellerId: string, data: SellerApplicationInput) => {
-  const user = await User.findById(sellerId);
-  if (!user) throw ApiError.notFound('User not found');
-  if (!user.sellerProfile) throw ApiError.badRequest('User has no seller profile');
-  if (user.sellerProfile.applicationStatus !== 'pending') {
-    throw ApiError.badRequest('Application has already been processed');
+export const handleSellerApplication = async (
+  adminId: string,
+  sellerId: string,
+  data: SellerApplicationInput
+) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const user = await User.findById(sellerId).session(session);
+    if (!user) throw ApiError.notFound('User not found');
+    if (!user.sellerProfile) throw ApiError.badRequest('User has no seller profile');
+    if (!user.sellerProfile.accessFeePaid) {
+      throw ApiError.badRequest('User has not paid the seller registration fee');
+    }
+    if (user.sellerProfile.applicationStatus !== 'pending') {
+      throw ApiError.badRequest('Application has already been processed');
+    }
+
+    const kyc = await SellerKYC.findOne({ userId: sellerId }).session(session);
+    if (!kyc) throw ApiError.badRequest('No KYC submission found for this user');
+
+    if (data.action === 'approve') {
+      user.role = UserRole.SELLER;
+      user.status = UserStatus.ACTIVE;
+      user.sellerProfile.applicationStatus = 'approved';
+      kyc.status = 'approved';
+      kyc.reviewedBy = new mongoose.Types.ObjectId(adminId);
+      kyc.reviewedAt = new Date();
+    } else {
+      user.sellerProfile.applicationStatus = 'rejected';
+      kyc.status = 'rejected';
+      kyc.rejectionReason = data.reason ?? 'No reason provided';
+      kyc.reviewedBy = new mongoose.Types.ObjectId(adminId);
+      kyc.reviewedAt = new Date();
+    }
+
+    await user.save({ session });
+    await kyc.save({ session });
+    await session.commitTransaction();
+
+    // Email seller about decision
+    if (user.email) {
+      const subject =
+        data.action === 'approve'
+          ? 'Your TrendFuel seller application has been approved!'
+          : 'Update on your TrendFuel seller application';
+      const html =
+        data.action === 'approve'
+          ? `<p>Hey ${user.firstName}, congratulations! Your seller application has been approved. You can now start listing services on TrendFuel.</p>`
+          : `<p>Hey ${user.firstName}, unfortunately your seller application was not approved at this time.${data.reason ? ` Reason: ${data.reason}` : ''}</p>`;
+      resend.emails.send({ from: FROM, to: user.email, subject, html }).catch(() => {});
+    }
+
+    return user;
+  } catch (err) {
+    await session.abortTransaction();
+    throw err;
+  } finally {
+    session.endSession();
   }
-
-  if (data.action === 'approve') {
-    user.sellerProfile.applicationStatus = 'approved';
-    user.role = UserRole.SELLER;
-    user.status = UserStatus.ACTIVE;
-  } else {
-    user.sellerProfile.applicationStatus = 'rejected';
-  }
-
-  await user.save();
-
-  // Email seller about decision
-  if (user.email) {
-    const subject =
-      data.action === 'approve'
-        ? 'Your TrendFuel seller application has been approved!'
-        : 'Update on your TrendFuel seller application';
-
-    const html =
-      data.action === 'approve'
-        ? `<p>Hey ${user.firstName}, congratulations! Your seller application has been approved. You can now start listing services on TrendFuel.</p>`
-        : `<p>Hey ${user.firstName}, unfortunately your seller application was not approved at this time.${data.reason ? ` Reason: ${data.reason}` : ''}</p>`;
-
-    resend.emails.send({ from: FROM, to: user.email, subject, html }).catch(() => {});
-  }
-
-  return user;
 };
 
+export const getSellerKYC = async (userId: string) => {
+  const kyc = await SellerKYC.findOne({ userId });
+  if (!kyc) throw ApiError.notFound('No KYC found for this user');
+  return kyc;
+};
 // ─── Service Management ───────────────────────────────────────────────────────
 
 export const getAllServices = async (page: number, limit: number, isActive?: boolean) => {

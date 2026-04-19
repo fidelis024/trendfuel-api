@@ -33,15 +33,30 @@ export const getSellerApplications = asyncHandler(async (req: Request, res: Resp
   const { applicants, pagination } = await adminService.getSellerApplications(page, limit);
   res
     .status(200)
-    .json(new ApiResponse(200, 'Seller applications fetched successfully', { applicants, pagination }));
+    .json(
+      new ApiResponse(200, 'Seller applications fetched successfully', { applicants, pagination })
+    );
 });
 
 // PATCH /api/v1/admin/seller-applications/:id
+// PATCH /api/v1/admin/seller-applications/:id
 export const handleSellerApplication = asyncHandler(async (req: Request, res: Response) => {
-  const user = await adminService.handleSellerApplication(req.params.id as string, req.body);
+  if (!req.user) throw ApiError.unauthorized('Authentication required');
+
+  const user = await adminService.handleSellerApplication(
+    req.user._id.toString(), // ← adminId for KYC reviewedBy
+    req.params.id as string,
+    req.body
+  );
   const msg =
     req.body.action === 'approve' ? 'Seller application approved' : 'Seller application rejected';
   res.status(200).json(new ApiResponse(200, msg, user));
+});
+
+// GET /api/v1/admin/seller-applications/:id/kyc
+export const getSellerKYC = asyncHandler(async (req: Request, res: Response) => {
+  const kyc = await adminService.getSellerKYC(req.params.id as string);
+  res.status(200).json(new ApiResponse(200, 'KYC details fetched successfully', kyc));
 });
 
 // ─── Services ─────────────────────────────────────────────────────────────────
@@ -54,7 +69,9 @@ export const getAllServices = asyncHandler(async (req: Request, res: Response) =
     req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined;
 
   const { services, pagination } = await adminService.getAllServices(page, limit, isActive);
-  res.status(200).json(new ApiResponse(200, 'Services fetched successfully', { services, pagination }));
+  res
+    .status(200)
+    .json(new ApiResponse(200, 'Services fetched successfully', { services, pagination }));
 });
 
 // PATCH /api/v1/admin/services/:id/feature
