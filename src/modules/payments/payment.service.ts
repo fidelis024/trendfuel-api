@@ -1,7 +1,8 @@
-import axios from 'axios';
+import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
+import axios from 'axios';
 import { Wallet, WalletType } from '../../schemas/mongoose/wallet.model';
 import {
   Transaction,
@@ -16,23 +17,13 @@ import { getPaginationOptions, buildPaginationMeta } from '../../utils/paginate'
 import { getConfig } from '../../config/platformconfig';
 import env from '../../config/env';
 import type {
-  TopupNairaInput,
+  SetWithdrawalWalletInput,
   TopupCryptoInput,
   WithdrawInput,
-  VerifyBankInput,
   GetTransactionsQuery,
+  AdminGetWithdrawalsQuery,
 } from '../../schemas/zod/payment.schema';
-
-// ─── Xixapay axios client ─────────────────────────────────────────────────────
-
-const xixapay = axios.create({
-  baseURL: 'https://api.xixapay.com/api',
-  headers: {
-    'Content-Type': 'application/json',
-    'api-key': env.XIXAPAY_API_KEY,
-    Authorization: `Bearer ${env.XIXAPAY_SECRET_KEY}`,
-  },
-});
+import { withdrawalSentEmail } from '../../utils/email';
 
 // ─── NOWPayments axios client ─────────────────────────────────────────────────
 
@@ -61,137 +52,48 @@ const ensureWallet = async (userId: string, type: WalletType, session?: mongoose
   return wallet;
 };
 
-// ─── Top-up via Xixapay (Naira) ───────────────────────────────────────────────
+// ─── Set or Update Withdrawal Wallet Address ──────────────────────────────────
 
-export const initiateNairaTopup = async (userId: string, data: TopupNairaInput) => {
-  const user = await User.findById(userId);
+export const setWithdrawalWallet = async (userId: string, data: SetWithdrawalWalletInput) => {
+  // Re-fetch user with passwordHash (select: false by default)
+  const user = await User.findById(userId).select('+passwordHash');
   if (!user) throw ApiError.notFound('User not found');
 
-  // Try all three bank codes — return whichever gives us an account
-  // bankCode must be array of strings per Xixapay docs
-  const bankCodes = ['29007'];
+  const isPasswordValid = await bcrypt.compare(data.password, user.passwordHash);
+  if (!isPasswordValid) throw ApiError.unauthorized('Incorrect password');
 
-  let response: any;
-  try {
-    response = await xixapay.post('/v1/createVirtualAccount', {
-      email: user.email,
-      name: `${user.firstName} ${user.lastName}`,
-      phoneNumber: '07067182018',
-      bankCode: bankCodes,
-      businessId: env.XIXAPAY_BUSINESS_ID,
-      accountType: 'dynamic',
-      amount: data.amount,
-    });
-  } catch (err: any) {
-    const msg = err.response?.data?.message ?? 'Failed to reach payment provider';
-    throw ApiError.internal(msg);
-  }
+  // Store address inside sellerProfile
+  user.sellerProfile = {
+    ...user.sellerProfile,
+    withdrawalWallet: {
+      address: data.address,
+      updatedAt: new Date(),
+    },
+  } as any;
 
-  if (!response.data) {
-    throw ApiError.internal(
-      response.data?.message ?? 'Failed to create payment account. Please try again.'
-    );
-  }
-
-
-  const bankAccounts = response.data.bankAccounts;
-
-  if (!bankAccounts || bankAccounts.length === 0) {
-    // Log the full response so we can debug
-    console.error('Xixapay returned empty bankAccounts:', JSON.stringify(response.data, null, 2));
-    throw ApiError.internal(
-      'Payment provider could not assign a bank account at this time. Please try again in a moment.'
-    );
-  }
-
-  // Prefer Palmpay (20867), fallback to whatever is returned
-  const account = bankAccounts.find((a: any) => a.bankCode === '29007') ?? bankAccounts[0];
+  await user.save();
 
   return {
-    amount: data.amount,
-    currency: 'NGN',
-    bankName: account.bankName,
-    accountNumber: account.accountNumber,
-    accountName: account.accountName,
-    expiresIn: '30 minutes',
-    instruction: `Transfer exactly ₦${data.amount.toLocaleString()} to the account above. Your TrendFuel wallet will be credited automatically once payment is confirmed.`,
+    address: data.address,
+    updatedAt: user.sellerProfile?.withdrawalWallet?.updatedAt,
   };
 };
 
-// ─── Xixapay Webhook Handler ──────────────────────────────────────────────────
+// ─── Get Withdrawal Wallet ────────────────────────────────────────────────────
 
-export const handleXixapayWebhook = async (rawBody: string, signature: string): Promise<void> => {
-  const computed = crypto
-    .createHmac('sha256', env.XIXAPAY_SECRET_KEY)
-    .update(rawBody)
-    .digest('hex');
+export const getWithdrawalWallet = async (userId: string) => {
+  const user = await User.findById(userId);
+  if (!user) throw ApiError.notFound('User not found');
 
-  if (computed !== signature) {
-    throw ApiError.unauthorized('Invalid webhook signature');
+  const wallet = user.sellerProfile?.withdrawalWallet;
+  if (!wallet?.address) {
+    return { address: null, message: 'No withdrawal wallet set' };
   }
 
-  const payload = JSON.parse(rawBody);
-
-  if (payload.notification_status !== 'payment_successful') {
-    return;
-  }
-
-  const { amount_paid, customer } = payload;
-  const user = await User.findOne({ email: customer?.email });
-  if (!user) {
-    console.error(`Xixapay webhook: no user found for email ${customer?.email}`);
-    return;
-  }
-
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
-  try {
-    const wallet = await ensureWallet(user._id.toString(), WalletType.BUYER, session);
-
-    const existing = await Transaction.findOne({
-      reference: `xixapay-${payload.transaction_id}`,
-    }).session(session);
-
-    if (existing) {
-      await session.abortTransaction();
-      return;
-    }
-
-    const amountInKobo = Math.round(amount_paid * 100);
-    wallet.balance += amountInKobo;
-    await wallet.save({ session });
-
-    await Transaction.create(
-      [
-        {
-          walletId: wallet._id,
-          userId: user._id,
-          type: TransactionType.TOPUP,
-          amount: amountInKobo,
-          direction: TransactionDirection.CREDIT,
-          status: TransactionStatus.COMPLETED,
-          reference: `xixapay-${payload.transaction_id}`,
-          gateway: PaymentGateway.BANK,
-          gatewayMeta: payload,
-          description: `Wallet top-up via bank transfer — ₦${amount_paid.toLocaleString()}`,
-        },
-      ],
-      { session }
-    );
-
-    await session.commitTransaction();
-    console.info(`Wallet credited ₦${amount_paid} for user ${user.email}`);
-  } catch (err) {
-    await session.abortTransaction();
-    throw err;
-  } finally {
-    session.endSession();
-  }
+  return { address: wallet.address, updatedAt: wallet.updatedAt };
 };
 
-// ─── Top-up via NOWPayments (Crypto) ─────────────────────────────────────────
-// FIX: NOWPayments requires specific currency codes like 'usdttrc20' not 'usdt'
+// ─── Top-up via NOWPayments (USDT TRC20 only) ────────────────────────────────
 
 export const initiateCryptoTopup = async (userId: string, data: TopupCryptoInput) => {
   const user = await User.findById(userId);
@@ -199,27 +101,14 @@ export const initiateCryptoTopup = async (userId: string, data: TopupCryptoInput
 
   const reference = `trendfuel-topup-${userId}-${uuidv4()}`;
 
-  // Map generic currency names to NOWPayments-specific codes
-  const currencyMap: Record<string, string> = {
-    usdt: 'usdttrc20', // USDT on TRC20 (Tron) — lowest fees
-    usdterc20: 'usdterc20',
-    usdttrc20: 'usdttrc20',
-    btc: 'btc',
-    eth: 'eth',
-    bnb: 'bnbbsc',
-    sol: 'sol',
-  };
-
-  const payCurrency = currencyMap[data.currency.toLowerCase()] ?? 'usdttrc20';
-
   let response: any;
   try {
     response = await nowpayments.post('/payment', {
       price_amount: data.amount,
       price_currency: 'usd',
-      pay_currency: payCurrency,
+      pay_currency: 'usdttrc20',
       order_id: reference,
-      order_description: `TrendFuel wallet top-up — $${data.amount}`,
+      order_description: `TrendFuel wallet top-up — $${data.amount} USDT`,
       ipn_callback_url: `${env.API_URL}/api/v1/payments/webhook/nowpayments`,
     });
   } catch (err: any) {
@@ -229,18 +118,19 @@ export const initiateCryptoTopup = async (userId: string, data: TopupCryptoInput
   }
 
   if (!response.data?.payment_id) {
-    throw ApiError.internal('Failed to create crypto payment. Please try again.');
+    throw ApiError.internal('Failed to create payment. Please try again.');
   }
 
   return {
     paymentId: response.data.payment_id,
     payAddress: response.data.pay_address,
     payAmount: response.data.pay_amount,
-    payCurrency: response.data.pay_currency,
+    payCurrency: 'USDT (TRC20)',
     amountUsd: data.amount,
+    network: 'TRC20 (Tron)',
     expiresAt: response.data.expiration_estimate_date,
     reference,
-    instruction: `Send exactly ${response.data.pay_amount} ${response.data.pay_currency.toUpperCase()} to the address above. Your wallet will be credited in USD after confirmation.`,
+    instruction: `Send exactly ${response.data.pay_amount} USDT (TRC20) to the address above. Your TrendFuel wallet will be credited automatically after network confirmation.`,
   };
 };
 
@@ -262,9 +152,10 @@ export const handleNowPaymentsWebhook = async (
   const payload = JSON.parse(rawBody);
 
   if (!['confirmed', 'finished'].includes(payload.payment_status)) {
-    return;
+    return; // Ignore non-final statuses
   }
 
+  // Extract userId from order_id: "trendfuel-topup-{userId}-{uuid}"
   const parts = payload.order_id?.split('-');
   if (!parts || parts.length < 3) return;
   const userId = parts[2];
@@ -275,6 +166,7 @@ export const handleNowPaymentsWebhook = async (
   try {
     const wallet = await ensureWallet(userId, WalletType.BUYER, session);
 
+    // Idempotency guard — don't credit twice
     const existing = await Transaction.findOne({
       reference: `nowpayments-${payload.payment_id}`,
     }).session(session);
@@ -284,6 +176,7 @@ export const handleNowPaymentsWebhook = async (
       return;
     }
 
+    // Store in cents (USD × 100)
     const amountInCents = Math.round(payload.price_amount * 100);
     wallet.balance += amountInCents;
     await wallet.save({ session });
@@ -300,13 +193,14 @@ export const handleNowPaymentsWebhook = async (
           reference: `nowpayments-${payload.payment_id}`,
           gateway: PaymentGateway.CRYPTO,
           gatewayMeta: payload,
-          description: `Wallet top-up via crypto — $${payload.price_amount}`,
+          description: `Wallet top-up via USDT (TRC20) — $${payload.price_amount}`,
         },
       ],
       { session }
     );
 
     await session.commitTransaction();
+    console.info(`Wallet credited $${payload.price_amount} USDT for userId ${userId}`);
   } catch (err) {
     await session.abortTransaction();
     throw err;
@@ -315,10 +209,34 @@ export const handleNowPaymentsWebhook = async (
   }
 };
 
-// ─── Withdrawal Request ───────────────────────────────────────────────────────
+// ─── Request Withdrawal (Seller) ──────────────────────────────────────────────
+// Manual flow: admin handles the actual USDT transfer.
+// Deducts clearedBalance immediately, creates a PENDING transaction.
+// Admin marks it as sent → seller gets an email.
 
 export const requestWithdrawal = async (userId: string, data: WithdrawInput) => {
   const config = await getConfig();
+
+  // Verify the seller has a withdrawal wallet set
+  const user = await User.findById(userId);
+  if (!user) throw ApiError.notFound('User not found');
+
+  const walletAddress = user.sellerProfile?.withdrawalWallet?.address;
+  if (!walletAddress) {
+    throw ApiError.badRequest(
+      'You must set a USDT (TRC20) withdrawal wallet address before requesting a withdrawal. ' +
+        'Go to Settings → Withdrawal Wallet to add your address.'
+    );
+  }
+
+  // Withdrawal delay check for new sellers
+  const daysSinceJoined = (Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+  if (daysSinceJoined < config.withdrawalDelayDays) {
+    throw ApiError.badRequest(
+      `New sellers must wait ${config.withdrawalDelayDays} days before their first withdrawal. ` +
+        `${Math.ceil(config.withdrawalDelayDays - daysSinceJoined)} day(s) remaining.`
+    );
+  }
 
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -327,29 +245,20 @@ export const requestWithdrawal = async (userId: string, data: WithdrawInput) => 
     const wallet = await Wallet.findOne({ userId }).session(session);
     if (!wallet) throw ApiError.badRequest('Wallet not found');
 
-    const amountInKobo = data.amount * 100;
-    const withdrawalFee = Math.round(amountInKobo * config.withdrawalFeeRate);
-    const netAmount = amountInKobo - withdrawalFee;
+    // All amounts in cents (USD × 100)
+    const amountInCents = Math.round(data.amount * 100);
+    const withdrawalFee = Math.round(amountInCents * config.withdrawalFeeRate); // 3%
+    const netAmount = amountInCents - withdrawalFee;
 
-    if (wallet.clearedBalance < amountInKobo) {
+    if (wallet.clearedBalance < amountInCents) {
       throw ApiError.badRequest(
-        `Insufficient balance. Available: ₦${(wallet.clearedBalance / 100).toFixed(2)}`
+        `Insufficient cleared balance. ` +
+          `Available: $${(wallet.clearedBalance / 100).toFixed(2)} USDT`
       );
     }
 
-    const user = await User.findById(userId).session(session);
-    if (user?.sellerMetrics) {
-      const daysSinceJoined =
-        (Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60 * 24);
-      if (daysSinceJoined < config.withdrawalDelayDays) {
-        throw ApiError.badRequest(
-          `New sellers must wait ${config.withdrawalDelayDays} days before withdrawing. ` +
-            `${Math.ceil(config.withdrawalDelayDays - daysSinceJoined)} day(s) remaining.`
-        );
-      }
-    }
-
-    wallet.clearedBalance -= amountInKobo;
+    // Deduct immediately so seller can't double-withdraw
+    wallet.clearedBalance -= amountInCents;
     await wallet.save({ session });
 
     const reference = `withdrawal-${userId}-${uuidv4()}`;
@@ -360,19 +269,20 @@ export const requestWithdrawal = async (userId: string, data: WithdrawInput) => 
           walletId: wallet._id,
           userId: new mongoose.Types.ObjectId(userId),
           type: TransactionType.WITHDRAWAL,
-          amount: amountInKobo,
+          amount: amountInCents,
           direction: TransactionDirection.DEBIT,
+          // Stays PENDING until admin manually marks it as sent
           status: TransactionStatus.PENDING,
           reference,
-          gateway: PaymentGateway.BANK,
+          gateway: PaymentGateway.CRYPTO,
           gatewayMeta: {
-            bankCode: data.bankCode,
-            accountNumber: data.accountNumber,
-            narration: data.narration,
-            withdrawalFee,
-            netAmount,
+            walletAddress, // TRC20 address admin should send to
+            network: 'TRC20',
+            withdrawalFee, // In cents
+            netAmount, // In cents — this is what admin sends
+            requestedAt: new Date().toISOString(),
           },
-          description: `Withdrawal request — ₦${data.amount.toLocaleString()}`,
+          description: `Withdrawal request — $${data.amount.toFixed(2)} USDT (TRC20)`,
         },
       ],
       { session }
@@ -380,47 +290,16 @@ export const requestWithdrawal = async (userId: string, data: WithdrawInput) => 
 
     await session.commitTransaction();
 
-    // Initiate payout via Xixapay
-    try {
-      const payoutResponse = await xixapay.post('/v1/transfer', {
-        businessId: env.XIXAPAY_BUSINESS_ID,
-        amount: netAmount / 100,
-        bank: data.bankCode,
-        accountNumber: data.accountNumber,
-        narration: data.narration ?? 'TrendFuel withdrawal',
-      });
-
-      await Transaction.findOneAndUpdate(
-        { reference },
-        {
-          status:
-            payoutResponse.data?.status === 'success'
-              ? TransactionStatus.COMPLETED
-              : TransactionStatus.FAILED,
-          'gatewayMeta.payoutResponse': payoutResponse.data,
-        }
-      );
-
-      if (!payoutResponse.data?.status) {
-        await Wallet.findOneAndUpdate({ userId }, { $inc: { clearedBalance: amountInKobo } });
-        throw ApiError.internal('Payout failed. Your balance has been restored.');
-      }
-    } catch (payoutErr: any) {
-      await Wallet.findOneAndUpdate({ userId }, { $inc: { clearedBalance: amountInKobo } });
-      await Transaction.findOneAndUpdate({ reference }, { status: TransactionStatus.FAILED });
-      throw ApiError.internal(
-        payoutErr?.response?.data?.message ?? 'Payout failed. Your balance has been restored.'
-      );
-    }
-
     return {
       reference,
       amountRequested: data.amount,
       withdrawalFee: withdrawalFee / 100,
       netPayout: netAmount / 100,
-      bankCode: data.bankCode,
-      accountNumber: data.accountNumber,
-      status: 'processing',
+      walletAddress,
+      network: 'TRC20 (Tron)',
+      status: 'pending',
+      message:
+        'Your withdrawal request has been received. The admin will process it shortly and you will receive an email once the USDT has been sent to your wallet.',
     };
   } catch (err) {
     await session.abortTransaction();
@@ -430,43 +309,80 @@ export const requestWithdrawal = async (userId: string, data: WithdrawInput) => 
   }
 };
 
-// ─── Verify Bank Account ──────────────────────────────────────────────────────
+// ─── Admin: Get All Withdrawal Requests ───────────────────────────────────────
 
-export const verifyBankAccount = async (data: VerifyBankInput) => {
-  try {
-    const response = await xixapay.post('/verify/bank', {
-      bank: data.bankCode,
-      accountNumber: data.accountNumber,
-    });
+export const adminGetWithdrawals = async (query: AdminGetWithdrawalsQuery) => {
+  const { page, limit, status } = query;
+  const { skip } = getPaginationOptions(page, limit);
 
+  const filter: Record<string, unknown> = {
+    type: TransactionType.WITHDRAWAL,
+  };
+  if (status) filter.status = status;
 
-    if (!response.data) {
-      throw ApiError.badRequest('Could not verify bank account. Please check the details.');
-    }
+  const [withdrawals, total] = await Promise.all([
+    Transaction.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).populate({
+      path: 'userId',
+      select: 'firstName lastName email sellerProfile.withdrawalWallet',
+    }),
+    Transaction.countDocuments(filter),
+  ]);
 
-    return {
-      accountName: response.data.AccountName,
-      bankName: response.data.BankName,
-      accountNumber: data.accountNumber,
-      bankCode: data.bankCode,
-    };
-  } catch (err: any) {
-    const msg = err.response?.data?.message ?? 'Could not verify bank account';
-    throw ApiError.badRequest(msg);
-  }
+  return {
+    withdrawals,
+    pagination: buildPaginationMeta(total, page, limit),
+  };
 };
 
-// ─── Get Supported Banks ──────────────────────────────────────────────────────
+// ─── Admin: Mark Withdrawal as Sent ──────────────────────────────────────────
 
-export const getSupportedBanks = async () => {
-  try {
-    const response = await xixapay.get('/get/banks');
-    if (!response.data) throw ApiError.internal('Failed to fetch banks list');
-    return response.data;
-  } catch (err: any) {
-    const msg = err.response?.data?.message ?? 'Failed to fetch banks';
-    throw ApiError.internal(msg);
+export const adminMarkWithdrawalSent = async (
+  transactionId: string,
+  adminId: string
+): Promise<void> => {
+  const transaction = await Transaction.findById(transactionId).populate<{
+    userId: {
+      _id: mongoose.Types.ObjectId;
+      firstName: string;
+      lastName: string;
+      email: string;
+    };
+  }>('userId', 'firstName lastName email');
+
+  if (!transaction) throw ApiError.notFound('Withdrawal transaction not found');
+  if (transaction.type !== TransactionType.WITHDRAWAL) {
+    throw ApiError.badRequest('Transaction is not a withdrawal');
   }
+  if (transaction.status !== TransactionStatus.PENDING) {
+    throw ApiError.badRequest(
+      `Withdrawal is already ${transaction.status}. Only pending withdrawals can be marked as sent.`
+    );
+  }
+
+  // Mark as completed
+  transaction.status = TransactionStatus.COMPLETED;
+  (transaction.gatewayMeta as any).markedSentBy = adminId;
+  (transaction.gatewayMeta as any).markedSentAt = new Date().toISOString();
+  transaction.markModified('gatewayMeta');
+  await transaction.save();
+
+  // Notify seller by email
+  const seller = transaction.userId as {
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+
+  const netAmountUsd = ((transaction.gatewayMeta as any).netAmount / 100).toFixed(2);
+  const walletAddress = (transaction.gatewayMeta as any).walletAddress;
+  const network = (transaction.gatewayMeta as any).network ?? 'TRC20';
+
+  await withdrawalSentEmail(seller.email, seller.firstName, {
+    reference: transaction.reference,
+    netAmountUsd,
+    walletAddress,
+    network,
+  });
 };
 
 // ─── Get Wallet ───────────────────────────────────────────────────────────────

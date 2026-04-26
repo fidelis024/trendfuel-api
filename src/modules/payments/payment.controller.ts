@@ -4,75 +4,88 @@ import { ApiResponse } from '../../utils/ApiResponse';
 import { ApiError } from '../../utils/ApiError';
 import * as paymentService from './payment.service';
 
-// POST /api/v1/payments/topup/naira
-export const initiateNairaTopup = asyncHandler(async (req: Request, res: Response) => {
+// ─── Withdrawal Wallet ────────────────────────────────────────────────────────
+
+/**
+ * GET /api/v1/payments/withdrawal-wallet
+ * Returns the seller's saved USDT TRC20 withdrawal wallet address.
+ */
+export const getWithdrawalWallet = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw ApiError.unauthorized('Authentication required');
-  const result = await paymentService.initiateNairaTopup(req.user._id.toString(), req.body);
-  res.status(200).json(new ApiResponse(200, 'Payment account created successfully', result));
+  const result = await paymentService.getWithdrawalWallet(req.user._id.toString());
+  res.status(200).json(new ApiResponse(200, 'Withdrawal wallet fetched successfully', result));
 });
 
-// POST /api/v1/payments/topup/crypto
+/**
+ * POST /api/v1/payments/withdrawal-wallet
+ * Set or update the seller's USDT TRC20 withdrawal wallet address.
+ * Requires password confirmation.
+ */
+export const setWithdrawalWallet = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) throw ApiError.unauthorized('Authentication required');
+  const result = await paymentService.setWithdrawalWallet(req.user._id.toString(), req.body);
+  res
+    .status(200)
+    .json(new ApiResponse(200, 'Withdrawal wallet address saved successfully', result));
+});
+
+// ─── Top-up ───────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/v1/payments/topup
+ * Initiate a USDT (TRC20) top-up via NOWPayments.
+ */
 export const initiateCryptoTopup = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw ApiError.unauthorized('Authentication required');
   const result = await paymentService.initiateCryptoTopup(req.user._id.toString(), req.body);
-  res.status(200).json(new ApiResponse(200, 'Crypto payment created successfully', result));
+  res.status(200).json(new ApiResponse(200, 'Payment address created successfully', result));
 });
 
-// POST /api/v1/payments/webhook/xixapay — public, no auth (Xixapay calls this)
-export const xixapayWebhook = asyncHandler(async (req: Request, res: Response) => {
-  const signature = req.headers['xixapay'] as string;
-  if (!signature) {
-    return res.status(400).json({ error: 'Missing signature header' });
-  }
+// ─── NOWPayments Webhook ──────────────────────────────────────────────────────
 
-  // Use raw body string for signature verification
-  const rawBody = JSON.stringify(req.body);
-  await paymentService.handleXixapayWebhook(rawBody, signature);
-
-  // Always return 200 to Xixapay so they don't retry
-  res.status(200).json({ status: 'ok' });
-});
-
-// POST /api/v1/payments/webhook/nowpayments — public, no auth
+/**
+ * POST /api/v1/payments/webhook/nowpayments
+ * Public — called by NOWPayments when a payment is confirmed.
+ */
 export const nowPaymentsWebhook = asyncHandler(async (req: Request, res: Response) => {
   const signature = req.headers['x-nowpayments-sig'] as string;
   if (!signature) {
     return res.status(400).json({ error: 'Missing signature header' });
   }
-
   const rawBody = JSON.stringify(req.body);
   await paymentService.handleNowPaymentsWebhook(rawBody, signature);
-
   res.status(200).json({ status: 'ok' });
 });
 
-// POST /api/v1/payments/withdraw
+// ─── Withdrawal ───────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/v1/payments/withdraw
+ * Seller requests a USDT withdrawal.
+ * Deducts clearedBalance immediately; admin manually sends the USDT and marks it sent.
+ */
 export const requestWithdrawal = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw ApiError.unauthorized('Authentication required');
   const result = await paymentService.requestWithdrawal(req.user._id.toString(), req.body);
-  res.status(200).json(new ApiResponse(200, 'Withdrawal processed successfully', result));
+  res.status(200).json(new ApiResponse(200, 'Withdrawal request submitted successfully', result));
 });
 
-// POST /api/v1/payments/verify-bank
-export const verifyBankAccount = asyncHandler(async (req: Request, res: Response) => {
-  const result = await paymentService.verifyBankAccount(req.body);
-  res.status(200).json(new ApiResponse(200, 'Bank account verified', result));
-});
+// ─── Wallet ───────────────────────────────────────────────────────────────────
 
-// GET /api/v1/payments/banks
-export const getSupportedBanks = asyncHandler(async (_req: Request, res: Response) => {
-  const banks = await paymentService.getSupportedBanks();
-  res.status(200).json(new ApiResponse(200, 'Banks fetched successfully', banks));
-});
-
-// GET /api/v1/payments/wallet
+/**
+ * GET /api/v1/payments/wallet
+ */
 export const getWallet = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw ApiError.unauthorized('Authentication required');
   const wallet = await paymentService.getWallet(req.user._id.toString());
   res.status(200).json(new ApiResponse(200, 'Wallet fetched successfully', wallet));
 });
 
-// GET /api/v1/payments/transactions
+// ─── Transactions ─────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/v1/payments/transactions
+ */
 export const getTransactions = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw ApiError.unauthorized('Authentication required');
   const { transactions, pagination } = await paymentService.getTransactions(

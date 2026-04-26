@@ -292,3 +292,137 @@ export const sendDisputeResolvedEmail = async (
     'dispute resolved email'
   );
 };
+
+export const sendWithdrawalSentEmail = async (
+  sellerEmail: string,
+  sellerFirstName: string,
+  withdrawal: {
+    reference: string;
+    grossAmountUsd: string; // e.g. "100.00"
+    feeUsd: string; // e.g. "3.00"
+    netAmountUsd: string; // e.g. "97.00"
+    walletAddress: string;
+    network: string; // e.g. "TRC20"
+  }
+) => {
+
+  await sendEmail(
+    sellerEmail,
+    '✅ Your TrendFuel Withdrawal Has Been Sent',
+    wrap(`
+      <h2 style="margin:0 0 12px;color:#f1f5f9;font-size:20px;font-weight:600;">Withdrawal Successful</h2>
+      <p style="margin:0 0 24px;color:#94a3b8;font-size:15px;line-height:1.6;">
+        Hey ${sellerFirstName}, your USDT withdrawal has been processed and sent to your wallet.
+        Please allow up to <strong style="color:#a78bfa;">30 minutes</strong> for the funds to
+        appear depending on network congestion.
+      </p>
+ 
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background:#0f1117;border-radius:8px;overflow:hidden;">
+        <tr>
+          <td style="padding:14px 20px;border-bottom:1px solid #2d3148;">
+            <p style="margin:0;color:#64748b;font-size:12px;text-transform:uppercase;">Amount Requested</p>
+            <p style="margin:4px 0 0;color:#f1f5f9;font-size:15px;">$${withdrawal.grossAmountUsd} USDT</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:14px 20px;border-bottom:1px solid #2d3148;">
+            <p style="margin:0;color:#64748b;font-size:12px;text-transform:uppercase;">Withdrawal Fee (3%)</p>
+            <p style="margin:4px 0 0;color:#f1f5f9;font-size:15px;">−$${withdrawal.feeUsd} USDT</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:14px 20px;border-bottom:1px solid #2d3148;background:#0d1f17;">
+            <p style="margin:0;color:#64748b;font-size:12px;text-transform:uppercase;">Amount Sent</p>
+            <p style="margin:4px 0 0;color:#1D9E75;font-size:22px;font-weight:700;">$${withdrawal.netAmountUsd} USDT</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:14px 20px;border-bottom:1px solid #2d3148;">
+            <p style="margin:0;color:#64748b;font-size:12px;text-transform:uppercase;">Network</p>
+            <p style="margin:4px 0 0;color:#f1f5f9;font-size:15px;">${withdrawal.network} (Tron)</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:14px 20px;border-bottom:1px solid #2d3148;">
+            <p style="margin:0;color:#64748b;font-size:12px;text-transform:uppercase;">Wallet Address</p>
+            <p style="margin:4px 0 0;color:#a78bfa;font-size:13px;font-family:monospace;word-break:break-all;">${withdrawal.walletAddress}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:14px 20px;">
+            <p style="margin:0;color:#64748b;font-size:12px;text-transform:uppercase;">Reference</p>
+            <p style="margin:4px 0 0;color:#94a3b8;font-size:13px;font-family:monospace;">${withdrawal.reference}</p>
+          </td>
+        </tr>
+      </table>
+ 
+ 
+      <table width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td style="background-color:#1e1b4b;border-left:3px solid #7c3aed;border-radius:4px;padding:14px 16px;">
+          <p style="margin:0;color:#a78bfa;font-size:13px;line-height:1.5;">
+            If you have any questions about this withdrawal, contact us at
+            <a href="mailto:support@trendfuelhq.org" style="color:#c4b5fd;">support@trendfuelhq.org</a>
+            and quote your reference number.
+          </p>
+        </td>
+      </tr></table>
+    `),
+    'withdrawal sent email'
+  );
+};
+
+export const withdrawalSentEmail = async (
+  sellerEmail: string,
+  sellerFirstName: string,
+  withdrawal: {
+    reference: string;
+    netAmountUsd: string; // e.g. "97.00"
+    walletAddress: string;
+    network: string; // e.g. "TRC20"
+  }
+) => {
+  const { reference, netAmountUsd, walletAddress, network } = withdrawal;
+
+  await sendEmail(
+    sellerEmail,
+    'Your TrendFuel Withdrawal Has Been Sent',
+    wrap(`
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #10b981;">Withdrawal Successful</h2>
+        <p>Hi ${sellerFirstName},</p>
+        <p>
+          Great news! Your withdrawal of <strong>$${netAmountUsd} USDT</strong> has been
+          successfully sent to your wallet.
+        </p>
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+          <tr style="background: #f9fafb;">
+            <td style="padding: 10px; border: 1px solid #e5e7eb; font-weight: bold;">Amount Sent</td>
+            <td style="padding: 10px; border: 1px solid #e5e7eb;">$${netAmountUsd} USDT</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #e5e7eb; font-weight: bold;">Network</td>
+            <td style="padding: 10px; border: 1px solid #e5e7eb;">${network} (Tron)</td>
+          </tr>
+          <tr style="background: #f9fafb;">
+            <td style="padding: 10px; border: 1px solid #e5e7eb; font-weight: bold;">Wallet Address</td>
+            <td style="padding: 10px; border: 1px solid #e5e7eb; word-break: break-all;">${walletAddress}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #e5e7eb; font-weight: bold;">Reference</td>
+            <td style="padding: 10px; border: 1px solid #e5e7eb;">${reference}</td>
+          </tr>
+        </table>
+        <p>
+          Please allow up to 30 minutes for the USDT to appear in your wallet depending on
+          network congestion.
+        </p>
+        <p>
+          If you have any questions, please contact support at
+          <a href="mailto:support@trendfuelhq.org">support@trendfuelhq.org</a>.
+        </p>
+        <p>— The TrendFuel Team</p>
+      </div>
+    `),
+    'withdrawal sent email'
+  );
+};

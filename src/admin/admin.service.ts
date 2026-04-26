@@ -2,7 +2,6 @@ import mongoose from 'mongoose';
 import { User, UserStatus, UserRole } from '../schemas/mongoose/user.model';
 import { Service } from '../schemas/mongoose/service.model';
 import { Order, OrderStatus } from '../schemas/mongoose/order.model';
-import { Transaction } from '../schemas/mongoose/transaction.model';
 import { Dispute, DisputeStatus } from '../schemas/mongoose/dispute.model';
 import { Wallet } from '../schemas/mongoose/wallet.model';
 import { ApiError } from '../utils/ApiError';
@@ -19,6 +18,16 @@ import type {
   AnnouncementInput,
 } from '../schemas/zod/admin.schema';
 import { SellerKYC } from '../schemas/mongoose/sellerKyc.model';
+
+import {
+  Transaction,
+  TransactionType,
+  TransactionStatus,
+} from '../schemas/mongoose/transaction.model';
+import { adminGetWithdrawalsSchema } from '../schemas/zod/payment.schema';
+import type { AdminGetWithdrawalsQuery } from '../schemas/zod/payment.schema';
+import { adminMarkWithdrawalSent, adminGetWithdrawals } from '../modules/payments/payment.service';
+import { sendWithdrawalSentEmail } from '../utils/email';
 
 const resend = new Resend(env.RESEND_API_KEY);
 const FROM = 'TrendFuel <noreply@trendfuelhq.org>';
@@ -632,3 +641,100 @@ export const removeAdmin = async (targetUserId: string, requesterId: string) => 
 
   return user;
 };
+
+/**
+ * GET /api/v1/admin/withdrawals
+ * Returns all withdrawal transactions with seller details populated.
+ * Optionally filtered by status: pending | completed | failed
+ */
+export const getWithdrawals = async (query: AdminGetWithdrawalsQuery) => {
+  const { page, limit, status } = query;
+  const { skip } = getPaginationOptions(page, limit);
+ 
+  const filter: Record<string, unknown> = {
+    type: TransactionType.WITHDRAWAL,
+  };
+  if (status) filter.status = status;
+ 
+  const [withdrawals, total] = await Promise.all([
+    Transaction.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate({
+        path: 'userId',
+        select:
+          'firstName lastName email sellerProfile.withdrawalWallet sellerProfile.level sellerProfile.applicationStatus',
+      }),
+    Transaction.countDocuments(filter),
+  ]);
+ 
+  return {
+    withdrawals,
+    pagination: buildPaginationMeta(total, page, limit),
+  };
+};
+ 
+/**
+ * PATCH /api/v1/admin/withdrawals/:transactionId/mark-sent
+ * Admin confirms they have sent the USDT to the seller's wallet.
+ * Marks the transaction as COMPLETED and emails the seller.
+ */
+export const markWithdrawalSent = async (
+  transactionId: string,
+  adminId: string
+): Promise<void> => {
+  const transaction = await Transaction.findById(transactionId).populate<{
+    userId: {
+      _id: mongoose.Types.ObjectId;
+      firstName: string;
+      lastName: string;
+      email: string;
+    };
+  }>('userId', 'firstName lastName email');
+ 
+  if (!transaction) throw ApiError.notFound('Withdrawal transaction not found');
+ 
+  if (transaction.type !== TransactionType.WITHDRAWAL) {
+    throw ApiError.badRequest('Transaction is not a withdrawal');
+  }
+ 
+  if (transaction.status !== TransactionStatus.PENDING) {
+    throw ApiError.badRequest(
+      `Withdrawal is already marked as "${transaction.status}". Only pending withdrawals can be marked as sent.`
+    );
+  }
+ 
+  // Mark as completed with audit trail
+  transaction.status = TransactionStatus.COMPLETED;
+  (transaction.gatewayMeta as any).markedSentBy = adminId;
+  (transaction.gatewayMeta as any).markedSentAt = new Date().toISOString();
+  transaction.markModified('gatewayMeta');
+  await transaction.save();
+ 
+  // Build readable amounts
+  const grossAmountUsd = (transaction.amount / 100).toFixed(2);
+  const feeUsd = ((transaction.gatewayMeta as any).withdrawalFee / 100).toFixed(2);
+  const netAmountUsd = ((transaction.gatewayMeta as any).netAmount / 100).toFixed(2);
+  const walletAddress = (transaction.gatewayMeta as any).walletAddress as string;
+  const network = ((transaction.gatewayMeta as any).network as string) ?? 'TRC20';
+ 
+  const seller = transaction.userId as {
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+ 
+  // Uses the named export that matches your email.ts signature exactly:
+  // sendEmail(to, subject, html, context) — all positional, no object
+  await sendWithdrawalSentEmail(seller.email, seller.firstName, {
+    reference: transaction.reference,
+    grossAmountUsd,
+    feeUsd,
+    netAmountUsd,
+    walletAddress,
+    network,
+  });
+};
+ 
+

@@ -17,6 +17,8 @@ import {
   removeAdminSchema,
 } from '../schemas/zod/admin.schema';
 import * as adminController from './admin.controller';
+import { adminGetWithdrawalsSchema, adminMarkWithdrawalSentSchema } from '../schemas/zod/payment.schema';
+import { getWithdrawalsController, markWithdrawalSentController } from './admin.controller';
 
 const router = Router();
 
@@ -203,6 +205,130 @@ router.get('/management', superAdminOnly, adminController.getAllAdmins);
  *         description: Pending seller applications
  */
 router.get('/seller-applications', adminController.getSellerApplications);
+
+/**
+ * @swagger
+ * /admin/withdrawals:
+ *   get:
+ *     summary: Get all seller withdrawal requests (admin only)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Returns all seller withdrawal transactions in descending order (newest first).
+ *       Each record includes the seller's name, email, and saved USDT wallet address.
+ *
+ *       Use this to review pending withdrawals and identify which sellers to pay.
+ *
+ *       Filter by `status=pending` to see only unprocessed requests.
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, completed, failed]
+ *         description: Filter withdrawals by status
+ *     responses:
+ *       200:
+ *         description: Paginated withdrawal list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 withdrawals:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       userId:
+ *                         type: object
+ *                         description: Populated seller details
+ *                         properties:
+ *                           firstName: { type: string }
+ *                           lastName: { type: string }
+ *                           email: { type: string }
+ *                           sellerProfile:
+ *                             type: object
+ *                             properties:
+ *                               withdrawalWallet:
+ *                                 type: object
+ *                                 properties:
+ *                                   address: { type: string, example: "TYourTRC20AddressHere" }
+ *                                   updatedAt: { type: string, format: date-time }
+ *                       amount:
+ *                         type: integer
+ *                         description: Gross amount in cents (÷100 = USD)
+ *                         example: 10000
+ *                       status:
+ *                         type: string
+ *                         enum: [pending, completed, failed]
+ *                       gatewayMeta:
+ *                         type: object
+ *                         properties:
+ *                           walletAddress: { type: string }
+ *                           network: { type: string, example: "TRC20" }
+ *                           withdrawalFee: { type: integer, description: "Fee in cents" }
+ *                           netAmount: { type: integer, description: "Net to send in cents" }
+ *                       reference:
+ *                         type: string
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                 pagination:
+ *                   type: object
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden — admin only
+ */
+router.get('/withdrawals', validate(adminGetWithdrawalsSchema), getWithdrawalsController);
+
+/**
+ * @swagger
+ * /admin/withdrawals/{transactionId}/mark-sent:
+ *   patch:
+ *     summary: Mark a withdrawal as sent (admin only)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Call this **after** you have manually transferred the USDT to the seller's TRC20 wallet.
+ *
+ *       **What happens:**
+ *       1. Transaction status changes from `pending` → `completed`
+ *       2. Admin ID and timestamp are recorded in `gatewayMeta` for auditing
+ *       3. Seller receives an email with the full transaction breakdown
+ *
+ *       **Important:** This action is irreversible. Only call it after the USDT has actually been sent.
+ *       The seller's `clearedBalance` was already deducted when they submitted the withdrawal request.
+ *     parameters:
+ *       - in: path
+ *         name: transactionId
+ *         required: true
+ *         schema: { type: string }
+ *         description: MongoDB ObjectId of the withdrawal Transaction document
+ *     responses:
+ *       200:
+ *         description: Withdrawal marked as sent — seller notified via email
+ *       400:
+ *         description: Transaction is not a pending withdrawal (already sent or failed)
+ *       404:
+ *         description: Transaction not found
+ */
+router.patch(
+  '/withdrawals/:transactionId/mark-sent',
+  validate(adminMarkWithdrawalSentSchema),
+  markWithdrawalSentController
+);
 
 /**
  * @swagger

@@ -96,7 +96,7 @@ export const getServices = async (query: GetServicesQuery) => {
 
 export const getServiceById = async (serviceId: string) => {
   const service = await Service.findOne({ _id: serviceId, isActive: true })
-    .populate('sellerId', 'firstName lastName sellerProfile')
+    .populate('sellerId', 'email firstName lastName sellerProfile')
     .populate('categoryId', 'name platform slug');
 
   if (!service) throw ApiError.notFound('Service not found');

@@ -29,15 +29,19 @@ export interface ITwoFA {
 }
 
 export interface ISellerProfile {
-  bio: string;
-  country: string;
-  niche: string;
-  level: SellerLevel;
-  badge: string | null;
+  bio?: string | null;
+  country?: string | null;
+  niche?: string | null;
+  level: 'new' | 'rising' | 'top' | 'pro';
+  badge?: string | null;
   applicationStatus: 'pending' | 'approved' | 'rejected';
   accessFeePaid: boolean;
   agreementAccepted: boolean;
-  agreementAcceptedAt: Date | null;
+  agreementAcceptedAt?: Date | null;
+  withdrawalWallet?: {
+    address: string | null;
+    updatedAt: Date | null;
+  };
 }
 
 export interface ISellerMetrics {
@@ -85,6 +89,25 @@ const TwoFASchema = new Schema<ITwoFA>(
   { _id: false }
 );
 
+// ─── Withdrawal wallet sub-schema ─────────────────────────────────────────────
+
+const WithdrawalWalletSchema = new Schema(
+  {
+    address: {
+      type: String,
+      default: null,
+      validate: {
+        validator: (v: string | null) => !v || /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(v),
+        message: 'Invalid USDT TRC20 wallet address',
+      },
+    },
+    updatedAt: { type: Date, default: null },
+  },
+  { _id: false }
+);
+
+// ─── Seller profile sub-schema ────────────────────────────────────────────────
+
 const SellerProfileSchema = new Schema<ISellerProfile>(
   {
     bio: { type: String, default: '' },
@@ -100,9 +123,13 @@ const SellerProfileSchema = new Schema<ISellerProfile>(
     accessFeePaid: { type: Boolean, default: false },
     agreementAccepted: { type: Boolean, default: false },
     agreementAcceptedAt: { type: Date, default: null },
+    // ── USDT TRC20 withdrawal destination ──────────────────────────────────
+    withdrawalWallet: { type: WithdrawalWalletSchema, default: null },
   },
   { _id: false }
 );
+
+// ─── Seller metrics sub-schema ────────────────────────────────────────────────
 
 const SellerMetricsSchema = new Schema<ISellerMetrics>(
   {
@@ -114,6 +141,8 @@ const SellerMetricsSchema = new Schema<ISellerMetrics>(
   },
   { _id: false }
 );
+
+// ─── User schema ──────────────────────────────────────────────────────────────
 
 const UserSchema = new Schema<IUser>(
   {
@@ -154,7 +183,7 @@ const UserSchema = new Schema<IUser>(
 UserSchema.index({ role: 1, status: 1 });
 UserSchema.index({ 'sellerProfile.applicationStatus': 1 });
 UserSchema.index({ createdAt: -1 });
-UserSchema.index({ firstName: 1, lastName: 1 }); // for admin user search
+UserSchema.index({ firstName: 1, lastName: 1 });
 
 UserSchema.pre('save', async function (next) {
   if (!this.isModified('passwordHash')) return next();

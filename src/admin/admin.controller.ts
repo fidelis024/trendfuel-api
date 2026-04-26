@@ -3,6 +3,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse } from '../utils/ApiResponse';
 import { ApiError } from '../utils/ApiError';
 import * as adminService from './admin.service';
+import { getWithdrawals, markWithdrawalSent } from './admin.service';
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 
@@ -152,3 +153,31 @@ export const removeAdmin = asyncHandler(async (req: Request, res: Response) => {
   const user = await adminService.removeAdmin(req.params.id as string, req.user._id.toString());
   res.status(200).json(new ApiResponse(200, 'Admin demoted to buyer successfully', user));
 });
+
+
+/**
+ * GET /api/v1/admin/withdrawals
+ * Get all seller withdrawal requests with seller info populated.
+ * Supports optional ?status=pending|completed|failed filter.
+ */
+export const getWithdrawalsController = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) throw ApiError.unauthorized('Authentication required');
+  const result = await getWithdrawals(req.query as any);
+  res.status(200).json(new ApiResponse(200, 'Withdrawals fetched successfully', result));
+});
+
+
+/**
+ * PATCH /api/v1/admin/withdrawals/:transactionId/mark-sent
+ * Admin marks a pending withdrawal as sent after transferring USDT manually.
+ * Triggers an email to the seller confirming the transfer.
+ */
+export const markWithdrawalSentController = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) throw ApiError.unauthorized('Authentication required');
+  await markWithdrawalSent(req.params.transactionId as string, req.user._id.toString());
+  res
+    .status(200)
+    .json(new ApiResponse(200, 'Withdrawal marked as sent. Seller has been notified via email.', null));
+});
+
+

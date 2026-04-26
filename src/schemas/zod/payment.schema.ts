@@ -1,49 +1,48 @@
 import { z } from 'zod';
 
-export const topupNairaSchema = z.object({
+// ─── USDT TRC20 address validator ─────────────────────────────────────────────
+// TRC20 addresses always start with 'T' and are 34 characters long (Base58)
+const trc20AddressSchema = z
+  .string()
+  .regex(/^T[1-9A-HJ-NP-Za-km-z]{33}$/, 'Invalid USDT TRC20 wallet address');
+
+// ─── Set / Edit withdrawal wallet address ────────────────────────────────────
+export const setWithdrawalWalletSchema = z.object({
+  body: z.object({
+    address: trc20AddressSchema,
+    password: z.string().min(1, 'Password is required to update withdrawal wallet'),
+  }),
+});
+
+// ─── Top-up via USDT (NOWPayments) ───────────────────────────────────────────
+export const topupCryptoSchema = z.object({
   body: z.object({
     amount: z
       .number({ required_error: 'Amount is required' })
-      .min(100, 'Minimum top-up is ₦100')
-      .max(10000000, 'Maximum top-up is ₦10,000,000'),
+      .min(10, 'Minimum top-up is $10 USDT'),
   }),
 });
 
-export const topupCryptoSchema = z.object({
-  body: z.object({
-    amount: z.number({ required_error: 'Amount is required' }).min(1, 'Minimum top-up is $1'),
-    currency: z.string().toLowerCase().default('usdt'),
-  }),
-});
-
+// ─── Withdrawal request ───────────────────────────────────────────────────────
 export const withdrawSchema = z.object({
   body: z.object({
     amount: z
       .number({ required_error: 'Amount is required' })
-      .min(500, 'Minimum withdrawal is ₦500'),
-    bankCode: z.string().min(1, 'Bank code is required'),
-    accountNumber: z
-      .string()
-      .length(10, 'Account number must be exactly 10 digits')
-      .regex(/^\d+$/, 'Account number must contain only digits'),
-    narration: z.string().max(100).optional().default('TrendFuel withdrawal'),
+      .min(10, 'Minimum withdrawal is $10 USDT'),
   }),
 });
 
-export const verifyBankSchema = z.object({
-  body: z.object({
-    bankCode: z.string().min(1, 'Bank code is required'),
-    accountNumber: z
-      .string()
-      .length(10, 'Account number must be exactly 10 digits')
-      .regex(/^\d+$/, 'Account number must contain only digits'),
-  }),
-});
-
+// ─── Get transactions (paginated + optional type filter) ─────────────────────
 export const getTransactionsSchema = z.object({
   query: z.object({
-    page: z.coerce.number().min(1).default(1),
-    limit: z.coerce.number().min(1).max(50).default(20),
+    page: z
+      .string()
+      .optional()
+      .transform((v) => (v ? parseInt(v, 10) : 1)),
+    limit: z
+      .string()
+      .optional()
+      .transform((v) => (v ? parseInt(v, 10) : 20)),
     type: z
       .enum([
         'topup',
@@ -52,16 +51,37 @@ export const getTransactionsSchema = z.object({
         'withdrawal',
         'refund',
         'commission',
-        'referral_bonus',
-        'promo',
-        'seller_access_fee',
+        'seller_registration_fee',
       ])
       .optional(),
   }),
 });
 
-export type TopupNairaInput = z.infer<typeof topupNairaSchema>['body'];
+// ─── Admin: mark withdrawal as sent ──────────────────────────────────────────
+export const adminMarkWithdrawalSentSchema = z.object({
+  params: z.object({
+    transactionId: z.string().min(1, 'Transaction ID is required'),
+  }),
+});
+
+// ─── Admin: get all withdrawals (paginated + optional status filter) ──────────
+export const adminGetWithdrawalsSchema = z.object({
+  query: z.object({
+    page: z
+      .string()
+      .optional()
+      .transform((v) => (v ? parseInt(v, 10) : 1)),
+    limit: z
+      .string()
+      .optional()
+      .transform((v) => (v ? parseInt(v, 10) : 20)),
+    status: z.enum(['pending', 'completed', 'failed']).optional(),
+  }),
+});
+
+// ─── Inferred Types ───────────────────────────────────────────────────────────
+export type SetWithdrawalWalletInput = z.infer<typeof setWithdrawalWalletSchema>['body'];
 export type TopupCryptoInput = z.infer<typeof topupCryptoSchema>['body'];
 export type WithdrawInput = z.infer<typeof withdrawSchema>['body'];
-export type VerifyBankInput = z.infer<typeof verifyBankSchema>['body'];
 export type GetTransactionsQuery = z.infer<typeof getTransactionsSchema>['query'];
+export type AdminGetWithdrawalsQuery = z.infer<typeof adminGetWithdrawalsSchema>['query'];
