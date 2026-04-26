@@ -17,7 +17,7 @@ export interface IService extends Document {
   categoryId: mongoose.Types.ObjectId;
   title: string;
   description: string;
-  pricePerUnit: number; // in cents
+  pricePerUnit: number;
   minQty: number;
   maxQty: number;
   deliveryHours: number;

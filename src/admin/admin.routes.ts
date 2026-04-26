@@ -526,6 +526,6 @@ router.get('/analytics', validate(analyticsSchema), adminController.getAnalytics
 
 // ─── Announcements ────────────────────────────────────────────────────────────
 
-router.post('/announcements', validate(announcementSchema), adminController.sendAnnouncement);
+// router.post('/announcements', validate(announcementSchema), adminController.sendAnnouncement);
 
 export default router;

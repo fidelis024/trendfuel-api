@@ -110,12 +110,6 @@ export const getAnalytics = asyncHandler(async (req: Request, res: Response) => 
 
 // ─── Announcements ────────────────────────────────────────────────────────────
 
-// POST /api/v1/admin/announcements
-export const sendAnnouncement = asyncHandler(async (req: Request, res: Response) => {
-  if (!req.user) throw ApiError.unauthorized('Authentication required');
-  const result = await adminService.sendAnnouncement(req.body);
-  res.status(200).json(new ApiResponse(200, `Announcement sent to ${result.sent} users`, result));
-});
 
 // ─── Commission ───────────────────────────────────────────────────────────────
 

@@ -107,7 +107,7 @@ export const sendNewOrderEmail = async (
     buyerName: string;
   }
 ) => {
-  const amount = (order.totalAmount / 100).toFixed(2);
+  const amount = order.totalAmount;
   const dashboardUrl = `${env.API_URL}/dashboard/orders/${order.orderId}`;
   await sendEmail(
     sellerEmail,
@@ -143,7 +143,6 @@ export const sendOrderDeliveredEmail = async (
   buyerFirstName: string,
   order: { orderId: string; serviceTitle: string; deliveryLink: string }
 ) => {
-  const orderUrl = `${env.API_URL}/dashboard/orders/${order.orderId}`;
   await sendEmail(
     buyerEmail,
     `Order delivered: ${order.serviceTitle}`,
@@ -158,7 +157,6 @@ export const sendOrderDeliveredEmail = async (
         <p style="margin:4px 0 0;"><a href="${order.deliveryLink}" style="color:#a78bfa;font-size:14px;word-break:break-all;">${order.deliveryLink}</a></p>
       </td></tr>
     </table>
-    ${btn(orderUrl, 'Confirm Delivery')}
     <table width="100%" cellpadding="0" cellspacing="0"><tr>
       <td style="background-color:#1e1b4b;border-left:3px solid #7c3aed;border-radius:4px;padding:14px 16px;">
         <p style="margin:0;color:#a78bfa;font-size:13px;line-height:1.5;">
@@ -176,8 +174,7 @@ export const sendOrderCompletedEmail = async (
   sellerFirstName: string,
   order: { orderId: string; serviceTitle: string; earnings: number }
 ) => {
-  const earnings = (order.earnings / 100).toFixed(2);
-  const dashboardUrl = `${env.API_URL}/dashboard/earnings`;
+  const earnings = order.earnings;
   await sendEmail(
     sellerEmail,
     `Payment released: $${earnings}`,
@@ -192,7 +189,6 @@ export const sendOrderCompletedEmail = async (
         <p style="margin:4px 0 0;color:#1D9E75;font-size:24px;font-weight:700;">+$${earnings}</p>
       </td></tr>
     </table>
-    ${btn(dashboardUrl, 'View Earnings')}
   `),
     'order completed email'
   );
@@ -203,7 +199,7 @@ export const sendOrderCancelledEmail = async (
   buyerFirstName: string,
   order: { serviceTitle: string; refundAmount: number }
 ) => {
-  const refund = (order.refundAmount / 100).toFixed(2);
+  const refund = order.refundAmount;
   await sendEmail(
     buyerEmail,
     `Order cancelled: ${order.serviceTitle}`,
@@ -229,7 +225,6 @@ export const sendDisputeOpenedEmail = async (
   sellerFirstName: string,
   dispute: { disputeId: string; serviceTitle: string; respondBy: Date }
 ): Promise<void> => {
-  const dashboardUrl = `${env.API_URL}/dashboard/disputes/${dispute.disputeId}`;
   const deadline = dispute.respondBy.toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
@@ -253,7 +248,6 @@ export const sendDisputeOpenedEmail = async (
       </td>
     </tr></table>
     <br/>
-    ${btn(dashboardUrl, 'Respond to Dispute')}
   `),
     'dispute opened email'
   );
@@ -264,8 +258,7 @@ export const sendDisputeResolvedEmail = async (
   recipientFirstName: string,
   dispute: { disputeId: string; serviceTitle: string; resolution: string; refundAmount: number }
 ): Promise<void> => {
-  const dashboardUrl = `${env.API_URL}/dashboard/disputes/${dispute.disputeId}`;
-  const refund = dispute.refundAmount > 0 ? `$${(dispute.refundAmount / 100).toFixed(2)}` : null;
+  const refund = dispute.refundAmount > 0 ? `$${dispute.refundAmount}` : null;
 
   const resolutionText: Record<string, string> = {
     refund_full: 'Full refund issued to buyer',
@@ -287,7 +280,6 @@ export const sendDisputeResolvedEmail = async (
         <p style="margin:4px 0 0;color:#f1f5f9;font-size:15px;">${resolutionText[dispute.resolution] ?? dispute.resolution}</p>
       </td></tr>
     </table>
-    ${btn(dashboardUrl, 'View Dispute')}
   `),
     'dispute resolved email'
   );
@@ -305,7 +297,6 @@ export const sendWithdrawalSentEmail = async (
     network: string; // e.g. "TRC20"
   }
 ) => {
-
   await sendEmail(
     sellerEmail,
     '✅ Your TrendFuel Withdrawal Has Been Sent',
@@ -424,5 +415,103 @@ export const withdrawalSentEmail = async (
       </div>
     `),
     'withdrawal sent email'
+  );
+};
+
+export const sendSellerApprovedEmail = async (sellerEmail: string, sellerFirstName: string) => {
+  await sendEmail(
+    sellerEmail,
+    '🎉 Your TrendFuel seller application has been approved!',
+    wrap(`
+      <h2 style="margin:0 0 12px;color:#f1f5f9;font-size:20px;font-weight:600;">
+        Congratulations, ${sellerFirstName}!
+      </h2>
+      <p style="margin:0 0 24px;color:#94a3b8;font-size:15px;line-height:1.6;">
+        Your seller application has been reviewed and <strong style="color:#1D9E75;">approved</strong>.
+        You can now start listing your services and earning on TrendFuel.
+      </p>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background:#0f1117;border-radius:8px;overflow:hidden;">
+        <tr>
+          <td style="padding:16px 20px;border-bottom:1px solid #2d3148;">
+            <p style="margin:0;color:#64748b;font-size:12px;text-transform:uppercase;">Account status</p>
+            <p style="margin:4px 0 0;color:#1D9E75;font-size:15px;font-weight:600;">✓ Seller — Active</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 20px;">
+            <p style="margin:0;color:#64748b;font-size:12px;text-transform:uppercase;">Next step</p>
+            <p style="margin:4px 0 0;color:#f1f5f9;font-size:15px;">Create your first service listing</p>
+          </td>
+        </tr>
+      </table>
+    `),
+    'seller approved email'
+  );
+};
+
+export const sendSellerRejectedEmail = async (
+  sellerEmail: string,
+  sellerFirstName: string,
+  reason?: string
+) => {
+  const supportUrl = `mailto:support@trendfuelhq.org`;
+
+  await sendEmail(
+    sellerEmail,
+    'Update on your TrendFuel seller application',
+    wrap(`
+      <h2 style="margin:0 0 12px;color:#f1f5f9;font-size:20px;font-weight:600;">
+        Application update, ${sellerFirstName}
+      </h2>
+      <p style="margin:0 0 24px;color:#94a3b8;font-size:15px;line-height:1.6;">
+        Thank you for applying to become a seller on TrendFuel. Unfortunately, after reviewing
+        your application and KYC documents, we were unable to approve your account at this time.
+      </p>
+
+      ${
+        reason
+          ? `
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;"><tr>
+        <td style="background-color:#2d1b1b;border-left:3px solid #E24B4A;border-radius:4px;padding:14px 16px;">
+          <p style="margin:0 0 6px;color:#F09595;font-size:12px;text-transform:uppercase;font-weight:600;">Reason for rejection</p>
+          <p style="margin:0;color:#fca5a5;font-size:14px;line-height:1.6;">${reason}</p>
+        </td>
+      </tr></table>`
+          : `<div style="margin-bottom:28px;"></div>`
+      }
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background:#0f1117;border-radius:8px;overflow:hidden;">
+        <tr>
+          <td style="padding:16px 20px;border-bottom:1px solid #2d3148;">
+            <p style="margin:0;color:#64748b;font-size:12px;text-transform:uppercase;">Can I reapply?</p>
+            <p style="margin:4px 0 0;color:#f1f5f9;font-size:14px;line-height:1.5;">
+              Yes. Please address the reason above and resubmit your KYC from your account settings.
+              Your registration fee remains on file — you will not be charged again.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 20px;">
+            <p style="margin:0;color:#64748b;font-size:12px;text-transform:uppercase;">Need help?</p>
+            <p style="margin:4px 0 0;color:#f1f5f9;font-size:14px;">
+              Contact us at
+              <a href="${supportUrl}" style="color:#a78bfa;">support@trendfuelhq.org</a>
+              and we'll guide you through the next steps.
+            </p>
+          </td>
+        </tr>
+      </table>
+
+      <table width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td style="background-color:#1e1b4b;border-left:3px solid #7c3aed;border-radius:4px;padding:14px 16px;">
+          <p style="margin:0;color:#a78bfa;font-size:13px;line-height:1.5;">
+            This decision was made by our compliance team. If you believe this is a mistake,
+            please reach out with your reference email and we'll review your case.
+          </p>
+        </td>
+      </tr></table>
+    `),
+    'seller rejected email'
   );
 };

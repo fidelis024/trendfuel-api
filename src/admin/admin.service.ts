@@ -27,7 +27,11 @@ import {
 import { adminGetWithdrawalsSchema } from '../schemas/zod/payment.schema';
 import type { AdminGetWithdrawalsQuery } from '../schemas/zod/payment.schema';
 import { adminMarkWithdrawalSent, adminGetWithdrawals } from '../modules/payments/payment.service';
-import { sendWithdrawalSentEmail } from '../utils/email';
+import {
+  sendSellerApprovedEmail,
+  sendSellerRejectedEmail,
+  sendWithdrawalSentEmail,
+} from '../utils/email';
 
 const resend = new Resend(env.RESEND_API_KEY);
 const FROM = 'TrendFuel <noreply@trendfuelhq.org>';
@@ -153,17 +157,11 @@ export const handleSellerApplication = async (
     await kyc.save({ session });
     await session.commitTransaction();
 
-    // Email seller about decision
-    if (user.email) {
-      const subject =
-        data.action === 'approve'
-          ? 'Your TrendFuel seller application has been approved!'
-          : 'Update on your TrendFuel seller application';
-      const html =
-        data.action === 'approve'
-          ? `<p>Hey ${user.firstName}, congratulations! Your seller application has been approved. You can now start listing services on TrendFuel.</p>`
-          : `<p>Hey ${user.firstName}, unfortunately your seller application was not approved at this time.${data.reason ? ` Reason: ${data.reason}` : ''}</p>`;
-      resend.emails.send({ from: FROM, to: user.email, subject, html }).catch(() => {});
+    // Send styled email — fire-and-forget so email failure never breaks the response
+    if (data.action === 'approve') {
+      sendSellerApprovedEmail(user.email, user.firstName).catch(() => {});
+    } else {
+      sendSellerRejectedEmail(user.email, user.firstName, data.reason ?? undefined).catch(() => {});
     }
 
     return user;
@@ -487,56 +485,6 @@ export const getAnalytics = async (query: AnalyticsQuery) => {
   };
 };
 
-// ─── Announcements ────────────────────────────────────────────────────────────
-
-export const sendAnnouncement = async (data: AnnouncementInput) => {
-  const filter: Record<string, unknown> = {
-    emailVerified: true,
-    status: UserStatus.ACTIVE,
-  };
-  if (data.targetRole !== 'all') filter.role = data.targetRole;
-
-  const users = await User.find(filter).select('email firstName').lean();
-
-  if (users.length === 0) throw ApiError.badRequest('No users found matching target');
-
-  // Send in batches of 50 to avoid rate limits
-  const BATCH_SIZE = 50;
-  let sent = 0;
-
-  for (let i = 0; i < users.length; i += BATCH_SIZE) {
-    const batch = users.slice(i, i + BATCH_SIZE);
-
-    await Promise.allSettled(
-      batch.map((user: { email: string }) =>
-        resend.emails.send({
-          from: FROM,
-          to: user.email,
-          subject: data.subject,
-          html: `
-            <div style="font-family:'Segoe UI',Arial,sans-serif;background:#0f1117;padding:40px 20px;">
-              <div style="max-width:560px;margin:0 auto;background:#1a1d2e;border-radius:12px;overflow:hidden;">
-                <div style="background:linear-gradient(135deg,#7c3aed,#4f46e5);padding:28px 40px;text-align:center;">
-                  <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700;">TrendFuel</h1>
-                </div>
-                <div style="padding:32px 40px;">
-                  <p style="color:#94a3b8;font-size:15px;line-height:1.7;margin:0;">${data.message.replace(/\n/g, '<br/>')}</p>
-                </div>
-                <div style="padding:20px 40px;border-top:1px solid #2d3148;text-align:center;">
-                  <p style="margin:0;color:#334155;font-size:12px;">&copy; ${new Date().getFullYear()} TrendFuel. All rights reserved.</p>
-                </div>
-              </div>
-            </div>
-          `,
-        })
-      )
-    );
-
-    sent += batch.length;
-  }
-
-  return { sent, total: users.length };
-};
 
 // ─── Commission Settings ──────────────────────────────────────────────────────
 
@@ -650,40 +598,33 @@ export const removeAdmin = async (targetUserId: string, requesterId: string) => 
 export const getWithdrawals = async (query: AdminGetWithdrawalsQuery) => {
   const { page, limit, status } = query;
   const { skip } = getPaginationOptions(page, limit);
- 
+
   const filter: Record<string, unknown> = {
     type: TransactionType.WITHDRAWAL,
   };
   if (status) filter.status = status;
- 
+
   const [withdrawals, total] = await Promise.all([
-    Transaction.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate({
-        path: 'userId',
-        select:
-          'firstName lastName email sellerProfile.withdrawalWallet sellerProfile.level sellerProfile.applicationStatus',
-      }),
+    Transaction.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).populate({
+      path: 'userId',
+      select:
+        'firstName lastName email sellerProfile.withdrawalWallet sellerProfile.level sellerProfile.applicationStatus',
+    }),
     Transaction.countDocuments(filter),
   ]);
- 
+
   return {
     withdrawals,
     pagination: buildPaginationMeta(total, page, limit),
   };
 };
- 
+
 /**
  * PATCH /api/v1/admin/withdrawals/:transactionId/mark-sent
  * Admin confirms they have sent the USDT to the seller's wallet.
  * Marks the transaction as COMPLETED and emails the seller.
  */
-export const markWithdrawalSent = async (
-  transactionId: string,
-  adminId: string
-): Promise<void> => {
+export const markWithdrawalSent = async (transactionId: string, adminId: string): Promise<void> => {
   const transaction = await Transaction.findById(transactionId).populate<{
     userId: {
       _id: mongoose.Types.ObjectId;
@@ -692,39 +633,39 @@ export const markWithdrawalSent = async (
       email: string;
     };
   }>('userId', 'firstName lastName email');
- 
+
   if (!transaction) throw ApiError.notFound('Withdrawal transaction not found');
- 
+
   if (transaction.type !== TransactionType.WITHDRAWAL) {
     throw ApiError.badRequest('Transaction is not a withdrawal');
   }
- 
+
   if (transaction.status !== TransactionStatus.PENDING) {
     throw ApiError.badRequest(
       `Withdrawal is already marked as "${transaction.status}". Only pending withdrawals can be marked as sent.`
     );
   }
- 
+
   // Mark as completed with audit trail
   transaction.status = TransactionStatus.COMPLETED;
   (transaction.gatewayMeta as any).markedSentBy = adminId;
   (transaction.gatewayMeta as any).markedSentAt = new Date().toISOString();
   transaction.markModified('gatewayMeta');
   await transaction.save();
- 
+
   // Build readable amounts
   const grossAmountUsd = (transaction.amount / 100).toFixed(2);
   const feeUsd = ((transaction.gatewayMeta as any).withdrawalFee / 100).toFixed(2);
   const netAmountUsd = ((transaction.gatewayMeta as any).netAmount / 100).toFixed(2);
   const walletAddress = (transaction.gatewayMeta as any).walletAddress as string;
   const network = ((transaction.gatewayMeta as any).network as string) ?? 'TRC20';
- 
+
   const seller = transaction.userId as {
     firstName: string;
     lastName: string;
     email: string;
   };
- 
+
   // Uses the named export that matches your email.ts signature exactly:
   // sendEmail(to, subject, html, context) — all positional, no object
   await sendWithdrawalSentEmail(seller.email, seller.firstName, {
@@ -736,5 +677,3 @@ export const markWithdrawalSent = async (
     network,
   });
 };
- 
-
