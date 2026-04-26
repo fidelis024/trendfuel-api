@@ -1,23 +1,23 @@
 import { Response } from 'express';
 import env from '../config/env';
 
+const isProduction = env.NODE_ENV === 'production';
+
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: env.NODE_ENV === 'production',
-  sameSite: 'strict' as const,
+  secure: isProduction,
+  sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
 };
 
 export const setAuthCookies = (res: Response, accessToken: string, refreshToken: string): void => {
-  // Access token — 15 minutes
   res.cookie('accessToken', accessToken, {
     ...COOKIE_OPTIONS,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    maxAge: 15 * 60 * 1000, // 15 minutes (you had 7 days — likely a bug)
   });
 
-  // Refresh token — 7 days
   res.cookie('refreshToken', refreshToken, {
     ...COOKIE_OPTIONS,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   });
 };
 
