@@ -28,6 +28,5 @@ export const submitKYCSchema = z.object({
       .regex(/^\+?[\d\s\-()]+$/, 'Invalid phone number'),
     streetAddress: z.string().min(5).max(200).trim(),
     city: z.string().min(2).max(100).trim(),
-    state: z.string().min(2).max(100).trim(),
   }),
 });

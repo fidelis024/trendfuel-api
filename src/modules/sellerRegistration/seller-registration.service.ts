@@ -4,12 +4,13 @@ import { User } from '../../schemas/mongoose/user.model';
 import { Transaction } from '../../schemas/mongoose/transaction.model';
 import { SellerKYC } from '../../schemas/mongoose/sellerKyc.model';
 import { ApiError } from '../../utils/ApiError';
-const SELLER_FEE_KOBO = 4_000_000; // ₦40,000 in kobo
+const SELLER_FEE_KOBO = 30;
 
 // ─── Step 1: Pay seller registration fee from wallet ─────────────────────────
 export const paySellerFee = async (userId: string) => {
   const session = await mongoose.startSession();
   session.startTransaction();
+
 
   try {
     const user = await User.findById(userId).session(session);
@@ -47,13 +48,22 @@ export const paySellerFee = async (userId: string) => {
     await Transaction.create(
       [
         {
-          userId,
-          type: 'seller_registration_fee',
+          walletId: wallet._id, // ✅ REQUIRED
+          userId: user._id,
+
+          type: 'seller_access_fee', // ✅ FIXED ENUM
           amount: SELLER_FEE_KOBO,
-          currency: 'NGN',
+
+          direction: 'debit', // ✅ REQUIRED (money leaving wallet)
+
           status: 'completed',
-          description: 'One-time seller registration fee',
+
           reference: `SELLER-REG-${userId}-${Date.now()}`,
+
+          gateway: 'internal', // ✅ since wallet deduction
+          gatewayMeta: {},
+
+          description: 'One-time seller registration fee',
         },
       ],
       { session }
@@ -78,8 +88,8 @@ export const paySellerFee = async (userId: string) => {
     return {
       message: 'Registration fee paid successfully. Please proceed to submit your KYC details.',
       feePaid: true,
-      amountDeducted: SELLER_FEE_KOBO / 100,
-      walletBalance: wallet.balance / 100,
+      amountDeducted: SELLER_FEE_KOBO,
+      walletBalance: wallet.balance,
     };
   } catch (err) {
     await session.abortTransaction();
@@ -99,7 +109,6 @@ export const submitKYC = async (
     phone: string;
     streetAddress: string;
     city: string;
-    state: string;
   }
 ) => {
   const user = await User.findById(userId);
@@ -131,7 +140,6 @@ export const submitKYC = async (
     existingKYC.phone = data.phone;
     existingKYC.streetAddress = data.streetAddress;
     existingKYC.city = data.city;
-    existingKYC.state = data.state;
     existingKYC.status = 'pending';
     existingKYC.rejectionReason = null;
     existingKYC.reviewedBy = null;
@@ -157,7 +165,6 @@ export const submitKYC = async (
     phone: data.phone,
     streetAddress: data.streetAddress,
     city: data.city,
-    state: data.state,
     status: 'pending',
   });
 

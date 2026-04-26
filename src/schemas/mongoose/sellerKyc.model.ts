@@ -8,7 +8,6 @@ export interface ISellerKYC extends Document {
   phone: string;
   streetAddress: string;
   city: string;
-  state: string;
   status: 'pending' | 'approved' | 'rejected';
   reviewedBy: mongoose.Types.ObjectId | null;
   reviewedAt: Date | null;
@@ -32,7 +31,6 @@ const SellerKYCSchema = new Schema<ISellerKYC>(
     phone: { type: String, required: true, trim: true, maxlength: 20 },
     streetAddress: { type: String, required: true, trim: true, maxlength: 200 },
     city: { type: String, required: true, trim: true, maxlength: 100 },
-    state: { type: String, required: true, trim: true, maxlength: 100 },
     status: {
       type: String,
       enum: ['pending', 'approved', 'rejected'],
