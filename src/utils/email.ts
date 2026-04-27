@@ -153,8 +153,7 @@ export const sendOrderDeliveredEmail = async (
     </p>
     <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;background:#0f1117;border-radius:8px;">
       <tr><td style="padding:16px 20px;">
-        <p style="margin:0;color:#64748b;font-size:12px;text-transform:uppercase;">Delivery proof</p>
-        <p style="margin:4px 0 0;"><a href="${order.deliveryLink}" style="color:#a78bfa;font-size:14px;word-break:break-all;">${order.deliveryLink}</a></p>
+        <p style="margin:0;color:#64748b;font-size:12px;text-transform:uppercase;">Delivery for ${order.serviceTitle} has been submitted, Check you dashboard for details.</p>
       </td></tr>
     </table>
     <table width="100%" cellpadding="0" cellspacing="0"><tr>

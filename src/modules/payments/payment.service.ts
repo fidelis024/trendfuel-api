@@ -24,6 +24,7 @@ import type {
   AdminGetWithdrawalsQuery,
 } from '../../schemas/zod/payment.schema';
 import { withdrawalSentEmail } from '../../utils/email';
+import { PlatformConfig } from '../../schemas/mongoose/platformconfig.model';
 
 // ─── NOWPayments axios client ─────────────────────────────────────────────────
 
@@ -229,14 +230,7 @@ export const requestWithdrawal = async (userId: string, data: WithdrawInput) => 
     );
   }
 
-  // Withdrawal delay check for new sellers
-  const daysSinceJoined = (Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60 * 24);
-  if (daysSinceJoined < config.withdrawalDelayDays) {
-    throw ApiError.badRequest(
-      `New sellers must wait ${config.withdrawalDelayDays} days before their first withdrawal. ` +
-        `${Math.ceil(config.withdrawalDelayDays - daysSinceJoined)} day(s) remaining.`
-    );
-  }
+  const COMMISSION_RATE = await PlatformConfig.findOne();
 
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -246,9 +240,11 @@ export const requestWithdrawal = async (userId: string, data: WithdrawInput) => 
     if (!wallet) throw ApiError.badRequest('Wallet not found');
 
     // All amounts in cents (USD × 100)
-    const amountInCents = Math.round(data.amount * 100);
-    const withdrawalFee = Math.round(amountInCents * config.withdrawalFeeRate); // 3%
+    let amountInCents = Math.round(data.amount * 100);
+    const withdrawalFee = Math.round(amountInCents * (COMMISSION_RATE?.withdrawalFeeRate ?? 0.03)); // 3%
     const netAmount = amountInCents - withdrawalFee;
+
+    amountInCents = data.amount; // For display purposes only; the fee is deducted in the transaction record, not from the wallet balance
 
     if (wallet.clearedBalance < amountInCents) {
       throw ApiError.badRequest(
@@ -278,8 +274,8 @@ export const requestWithdrawal = async (userId: string, data: WithdrawInput) => 
           gatewayMeta: {
             walletAddress, // TRC20 address admin should send to
             network: 'TRC20',
-            withdrawalFee, // In cents
-            netAmount, // In cents — this is what admin sends
+            withdrawalFee: withdrawalFee / 100, // In USD
+            netAmount: netAmount / 100, // In USD — this is what admin sends
             requestedAt: new Date().toISOString(),
           },
           description: `Withdrawal request — $${data.amount.toFixed(2)} USDT (TRC20)`,

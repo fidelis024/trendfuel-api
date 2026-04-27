@@ -654,9 +654,9 @@ export const markWithdrawalSent = async (transactionId: string, adminId: string)
   await transaction.save();
 
   // Build readable amounts
-  const grossAmountUsd = (transaction.amount / 100).toFixed(2);
-  const feeUsd = ((transaction.gatewayMeta as any).withdrawalFee / 100).toFixed(2);
-  const netAmountUsd = ((transaction.gatewayMeta as any).netAmount / 100).toFixed(2);
+  const grossAmountUsd = (transaction.amount).toFixed(2);
+  const feeUsd = ((transaction.gatewayMeta as any).withdrawalFee).toFixed(2);
+  const netAmountUsd = ((transaction.gatewayMeta as any).netAmount).toFixed(2);
   const walletAddress = (transaction.gatewayMeta as any).walletAddress as string;
   const network = ((transaction.gatewayMeta as any).network as string) ?? 'TRC20';
 
