@@ -6,6 +6,8 @@ const allowedOrigins = [
   'http://localhost:3001',
   'http://127.0.0.1:3000',
   'https://trendfuel-api.onrender.com',
+  'https://trendfuel-api-hhhl.onrender.com',
+
   // Production — any subdomain of trendfuelhq.org
   /^https:\/\/(.*\.)?trendfuelhq\.org$/,
   /^https:\/\/(.*\.)?trendfuel\.vercel\.app$/,
