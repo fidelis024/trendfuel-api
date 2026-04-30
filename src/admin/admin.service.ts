@@ -489,7 +489,7 @@ export const getAnalytics = async (query: AnalyticsQuery) => {
 // ─── Commission Settings ──────────────────────────────────────────────────────
 
 export const getCommissionSettings = async () => {
-  const { getConfig } = await import('../config/platformconfig');
+  const { getConfig } = await import('../config/platformconfig.js');
   const config = await getConfig();
 
   // Calculate revenue breakdown
@@ -535,7 +535,7 @@ export const updateCommissionSettings = async (
   updates: Record<string, unknown>,
   adminId: string
 ) => {
-  const { updateConfig } = await import('../config/platformconfig');
+  const { updateConfig } = await import('../config/platformconfig.js');
   return updateConfig(updates as any, adminId);
 };
 
